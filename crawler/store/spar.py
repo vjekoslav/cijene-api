@@ -8,43 +8,11 @@ from time import time
 from typing import Dict, List, Optional, Tuple
 
 import httpx
-from pydantic import BaseModel, Field
 
+from crawler.store.models import Product, Store
 from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
 
 logger = logging.getLogger(__name__)
-
-
-class SparProduct(BaseModel):
-    """
-    Represents a product from Spar's price list.
-    """
-
-    product: str
-    product_id: str
-    brand: str
-    quantity: str
-    unit: str
-    price: Decimal
-    unit_price: Decimal
-    best_price_30: Decimal  # Najniža cijena u posljednjih 30 dana
-    anchor_price_date: Optional[str] = None  # Datum sidrene cijene
-    anchor_price: Optional[Decimal] = None  # Sidrena cijena
-    barcode: str
-    category: str
-
-
-class SparStore(BaseModel):
-    """
-    Represents a Spar store with its products.
-    """
-
-    name: str
-    store_type: str  # hipermarket or supermarket
-    city: str
-    street_address: str
-    zipcode: str
-    items: List[SparProduct] = Field(default_factory=list)
 
 
 class SparCrawler:
@@ -99,7 +67,7 @@ class SparCrawler:
         logger.debug(f"Successfully fetched price list index, found {count} files")
         return json_data
 
-    def parse_store_from_filename(self, filename: str) -> Optional[SparStore]:
+    def parse_store_from_filename(self, filename: str) -> Optional[Store]:
         """
         Extract store information from CSV filename using regex.
 
@@ -107,7 +75,7 @@ class SparCrawler:
             filename: Name of the CSV file with store information
 
         Returns:
-            SparStore object with parsed store information, or None if parsing fails
+            Store object with parsed store information, or None if parsing fails
         """
         logger.debug(f"Parsing store information from filename: {filename}")
 
@@ -120,7 +88,7 @@ class SparCrawler:
                 logger.warning(f"Failed to match filename pattern: {filename}")
                 return None
 
-            store_type, city, street_address, zipcode, store_name = match.groups()
+            store_type, city, street_address, store_id, store_name = match.groups()
 
             # Format the extracted information
             formatted_store_type = to_camel_case(store_type)
@@ -128,17 +96,18 @@ class SparCrawler:
             formatted_street_address = to_camel_case(street_address.replace("_", " "))
             formatted_store_name = to_camel_case(store_name)
 
-            store = SparStore(
+            store = Store(
+                chain="spar",
+                store_id=store_id,
                 name=formatted_store_name,
                 store_type=formatted_store_type,
                 city=formatted_city,
                 street_address=formatted_street_address,
-                zipcode=zipcode,
                 items=[],
             )
 
             logger.info(
-                f"Parsed store: {store.name}, {store.store_type}, {store.city}, {store.street_address}, {store.zipcode}"
+                f"Parsed store: {store.name}, {store.store_type}, {store.city}, {store.street_address}"
             )
             return store
 
@@ -169,15 +138,15 @@ class SparCrawler:
             logger.error(f"Failed to download CSV from {url}: {str(e)}")
             return None
 
-    def parse_csv(self, csv_content: str) -> List[SparProduct]:
+    def parse_csv(self, csv_content: str) -> List[Product]:
         """
-        Parses CSV content into SparProduct objects.
+        Parses CSV content into Product objects.
 
         Args:
             csv_content: CSV content as a string
 
         Returns:
-            List of SparProduct objects
+            List of Product objects
         """
         logger.debug("Parsing CSV content")
 
@@ -201,7 +170,7 @@ class SparCrawler:
 
                 anchor_price_date = row.get("datum sidrene cijene", None)
 
-                product = SparProduct(
+                product = Product(
                     product=row.get("naziv", ""),
                     product_id=row.get("šifra", ""),
                     brand=row.get("marka", ""),
@@ -225,7 +194,7 @@ class SparCrawler:
 
     def get_all_products(
         self, date: datetime.date
-    ) -> Tuple[datetime.date, List[SparStore]]:
+    ) -> Tuple[datetime.date, List[Store]]:
         """
         Main method to fetch and parse all products from Spar's price lists.
 
@@ -233,7 +202,7 @@ class SparCrawler:
             date: The date for which to fetch the price list
 
         Returns:
-            Tuple with the date and the list of SparStore objects,
+            Tuple with the date and the list of Store objects,
             each containing its products.
 
         Raises:
@@ -303,8 +272,6 @@ class SparCrawler:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    # Example usage with a specific date
     crawler = SparCrawler()
-    # Use current date for testing
     current_date = datetime.date.today()
     price_date, stores = crawler.get_all_products(current_date)
