@@ -27,6 +27,9 @@ class KonzumProduct(BaseModel):
     unit_price: float
     barcode: str
     category: str
+    special_price: Optional[float] = None  # "MPC ZA VRIJEME POSEBNOG OBLIKA PRODAJE"
+    best_price_30: Optional[float] = None  # "NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA"
+    anchor_price: Optional[float] = None  # "SIDRENA CIJENA NA 2.5.2025"
 
 
 class KonzumStore(BaseModel):
@@ -206,6 +209,30 @@ class KonzumCrawler:
                     row.get("CIJENA ZA JEDINICU MJERE", "0").replace(",", ".") or 0
                 )
 
+                # Parse the new price fields, handling potential empty values
+                special_price_str = row.get(
+                    "MPC ZA VRIJEME POSEBNOG OBLIKA PRODAJE", ""
+                )
+                best_price_30_str = row.get("NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA", "")
+                anchor_price_str = row.get("SIDRENA CIJENA NA 2.5.2025", "")
+
+                # Convert to float or None if empty
+                special_price = (
+                    float(special_price_str.replace(",", "."))
+                    if special_price_str
+                    else None
+                )
+                best_price_30 = (
+                    float(best_price_30_str.replace(",", "."))
+                    if best_price_30_str
+                    else None
+                )
+                anchor_price = (
+                    float(anchor_price_str.replace(",", "."))
+                    if anchor_price_str
+                    else None
+                )
+
                 product = KonzumProduct(
                     product=row.get("NAZIV PROIZVODA", ""),
                     product_id=row.get("ŠIFRA PROIZVODA", ""),
@@ -216,6 +243,9 @@ class KonzumCrawler:
                     unit_price=cijena_za_jedinicu,
                     barcode=row.get("BARKOD", ""),
                     category=row.get("KATEGORIJA PROIZVODA", ""),
+                    special_price=special_price,
+                    best_price_30=best_price_30,
+                    anchor_price=anchor_price,
                 )
                 products.append(product)
             except Exception as e:
@@ -439,6 +469,7 @@ class KonzumCrawler:
                     products = self.parse_csv(csv_content)
                     store.items = products
                     stores.append(store)
+                    break
 
                 except Exception as e:
                     logger.error(f"Error processing CSV from {url}: {str(e)}")
