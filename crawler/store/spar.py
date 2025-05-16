@@ -9,6 +9,8 @@ from typing import Dict, List, Optional, Tuple
 import httpx
 from pydantic import BaseModel, Field
 
+from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
+
 logger = logging.getLogger(__name__)
 
 
@@ -96,26 +98,6 @@ class SparCrawler:
         logger.debug(f"Successfully fetched price list index, found {count} files")
         return json_data
 
-    def to_camel_case(self, text: str) -> str:
-        """
-        Converts text to camel case.
-
-        Args:
-            text: Input text, typically in lowercase with underscores
-
-        Returns:
-            Text converted to camel case
-        """
-        if not text:
-            return ""
-
-        # Replace underscores with spaces
-        text = text.replace("_", " ")
-        # Split by spaces and capitalize each word
-        words = [word.capitalize() for word in text.split()]
-        # Join with spaces
-        return " ".join(words)
-
     def parse_store_from_filename(self, filename: str) -> Optional[SparStore]:
         """
         Extract store information from CSV filename using regex.
@@ -140,12 +122,10 @@ class SparCrawler:
             store_type, city, street_address, zipcode, store_name = match.groups()
 
             # Format the extracted information
-            formatted_store_type = self.to_camel_case(store_type)
-            formatted_city = self.to_camel_case(city)
-            formatted_street_address = self.to_camel_case(
-                street_address.replace("_", " ")
-            )
-            formatted_store_name = self.to_camel_case(store_name)
+            formatted_store_type = to_camel_case(store_type)
+            formatted_city = to_camel_case(city)
+            formatted_street_address = to_camel_case(street_address.replace("_", " "))
+            formatted_store_name = to_camel_case(store_name)
 
             store = SparStore(
                 name=formatted_store_name,
@@ -206,23 +186,16 @@ class SparCrawler:
         for row in reader:
             try:
                 # Convert potential empty strings to 0.0 for numeric fields
-                price = float(row.get("MPC", "0").replace(",", ".") or 0)
-                unit_price = float(
-                    row.get("cijena za jedinicu mjere", "0").replace(",", ".") or 0
-                )
-                best_price_30 = float(
-                    row.get("Najniža cijena u posljednjih 30 dana", "0").replace(
-                        ",", "."
-                    )
-                    or 0
+                price = parse_price(row.get("MPC", "0"))
+                unit_price = parse_price(row.get("cijena za jedinicu mjere", "0"))
+                best_price_30 = parse_price(
+                    row.get("Najniža cijena u posljednjih 30 dana", "0")
                 )
 
                 # Handle optional anchor price and date
                 anchor_price_str = row.get("sidrena cijena na 2.5.2025.", "")
                 anchor_price = (
-                    float(anchor_price_str.replace(",", "."))
-                    if anchor_price_str
-                    else None
+                    parse_price(anchor_price_str) if anchor_price_str else None
                 )
 
                 anchor_price_date = row.get("datum sidrene cijene", None)
@@ -317,9 +290,8 @@ class SparCrawler:
 
             total_products = sum(len(store.items) for store in stores)
             t1 = time()
-            dt = int(t1 - t0)
-            logger.info(
-                f"Completed Spar crawl for {date} in {dt}s, found {len(stores)} stores with {total_products} total products"
+            log_operation_timing(
+                "crawl", "Spar", date, t0, t1, len(stores), total_products
             )
             return date, stores
 

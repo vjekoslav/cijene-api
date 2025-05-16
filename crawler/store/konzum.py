@@ -10,6 +10,8 @@ import httpx
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
+from crawler.store.utils import to_camel_case, log_operation_timing, parse_price
+
 logger = logging.getLogger(__name__)
 
 
@@ -202,11 +204,9 @@ class KonzumCrawler:
         for row in reader:
             try:
                 # Convert potential empty strings to 0.0 for numeric fields
-                maloprodajna_cijena = float(
-                    row.get("MALOPRODAJNA CIJENA", "0").replace(",", ".") or 0
-                )
-                cijena_za_jedinicu = float(
-                    row.get("CIJENA ZA JEDINICU MJERE", "0").replace(",", ".") or 0
+                maloprodajna_cijena = parse_price(row.get("MALOPRODAJNA CIJENA", "0"))
+                cijena_za_jedinicu = parse_price(
+                    row.get("CIJENA ZA JEDINICU MJERE", "0")
                 )
 
                 # Parse the new price fields, handling potential empty values
@@ -217,20 +217,15 @@ class KonzumCrawler:
                 anchor_price_str = row.get("SIDRENA CIJENA NA 2.5.2025", "")
 
                 # Convert to float or None if empty
+                # Parse price fields if present
                 special_price = (
-                    float(special_price_str.replace(",", "."))
-                    if special_price_str
-                    else None
+                    parse_price(special_price_str) if special_price_str else None
                 )
                 best_price_30 = (
-                    float(best_price_30_str.replace(",", "."))
-                    if best_price_30_str
-                    else None
+                    parse_price(best_price_30_str) if best_price_30_str else 0.0
                 )
                 anchor_price = (
-                    float(anchor_price_str.replace(",", "."))
-                    if anchor_price_str
-                    else None
+                    parse_price(anchor_price_str) if anchor_price_str else None
                 )
 
                 product = KonzumProduct(
@@ -291,26 +286,6 @@ class KonzumCrawler:
         )
         return date_obj, csv_links
 
-    def to_camel_case(self, text: str) -> str:
-        """
-        Converts text to camel case.
-
-        Args:
-            text: Input text, typically in uppercase
-
-        Returns:
-            Text converted to camel case
-        """
-        if not text:
-            return ""
-
-        # Replace underscores with spaces and convert to lowercase
-        text = text.lower().replace("_", " ")
-        # Split by spaces and capitalize each word
-        words = [word.capitalize() for word in text.split()]
-        # Join with spaces
-        return " ".join(words)
-
     def parse_store_from_url(self, url: str) -> Optional[KonzumStore]:
         """
         Extracts store information from a CSV download URL.
@@ -345,7 +320,7 @@ class KonzumCrawler:
                     return None
 
                 # Extract store type
-                store_type = self.to_camel_case(parts[0])
+                store_type = to_camel_case(parts[0])
 
                 # Extract address and use regex to identify zipcode and city
                 address_string = parts[1]
@@ -361,20 +336,20 @@ class KonzumCrawler:
 
                     if len(address_parts) >= 2:
                         # First part is street address (trim trailing spaces)
-                        street_address = self.to_camel_case(address_parts[0].strip())
+                        street_address = to_camel_case(address_parts[0].strip())
                         # Second part is city (trim leading spaces)
-                        city = self.to_camel_case(address_parts[1].strip())
+                        city = to_camel_case(address_parts[1].strip())
                     else:
                         logger.warning(
                             f"Could not parse address properly: {address_string}"
                         )
-                        street_address = self.to_camel_case(address_string)
+                        street_address = to_camel_case(address_string)
                         city = ""
                 else:
                     logger.warning(
                         f"Could not find zipcode in address: {address_string}"
                     )
-                    street_address = self.to_camel_case(address_string)
+                    street_address = to_camel_case(address_string)
                     zipcode = ""
                     city = ""
             else:
@@ -385,7 +360,7 @@ class KonzumCrawler:
                     return None
 
                 # Extract store type and address
-                store_type = self.to_camel_case(parts[0])
+                store_type = to_camel_case(parts[0])
                 address_str = parts[1]
 
                 # Parse address components
@@ -394,9 +369,9 @@ class KonzumCrawler:
                     logger.warning(f"Invalid address format: {address_str}")
                     return None
 
-                street_address = self.to_camel_case(address_parts[0])
+                street_address = to_camel_case(address_parts[0])
                 zipcode = address_parts[1]
-                city = self.to_camel_case("_".join(address_parts[2:]))
+                city = to_camel_case("_".join(address_parts[2:]))
 
             store = KonzumStore(
                 store_type=store_type,
@@ -477,9 +452,8 @@ class KonzumCrawler:
 
             total_products = sum(len(store.items) for store in stores)
             t1 = time()
-            dt = int(t1 - t0)
-            logger.info(
-                f"Completed Konzum crawl for {price_date} in {dt}s, found {len(stores)} stores with {total_products} total products"
+            log_operation_timing(
+                "crawl", "Konzum", price_date, t0, t1, len(stores), total_products
             )
             return price_date, stores
 

@@ -12,6 +12,8 @@ import httpx
 from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
+from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
+
 logger = logging.getLogger(__name__)
 
 
@@ -172,26 +174,6 @@ class PlodineCrawler:
         logger.debug(f"Successfully extracted {len(csv_files)} CSV files from ZIP")
         return csv_files
 
-    def to_camel_case(self, text: str) -> str:
-        """
-        Converts text to camel case.
-
-        Args:
-            text: Input text, typically in uppercase with underscores
-
-        Returns:
-            Text converted to camel case
-        """
-        if not text:
-            return ""
-
-        # Replace underscores with spaces and convert to lowercase
-        text = text.lower().replace("_", " ")
-        # Split by spaces and capitalize each word
-        words = [word.capitalize() for word in text.split()]
-        # Join with spaces
-        return " ".join(words)
-
     def parse_store_from_filename(self, filename: str) -> Optional[PlodineStore]:
         """
         Extract store information from CSV filename using regex.
@@ -217,9 +199,9 @@ class PlodineCrawler:
             store_type, street_address_raw, zipcode, city = match.groups()
 
             # Format the extracted information
-            formatted_store_type = self.to_camel_case(store_type)
-            formatted_street_address = self.to_camel_case(street_address_raw)
-            formatted_city = self.to_camel_case(city)
+            formatted_store_type = to_camel_case(store_type)
+            formatted_street_address = to_camel_case(street_address_raw)
+            formatted_city = to_camel_case(city)
 
             # Use city as the store name
             store_name = f"Plodine {formatted_city}"
@@ -242,32 +224,6 @@ class PlodineCrawler:
             logger.error(f"Failed to parse store from filename {filename}: {str(e)}")
             return None
 
-    def parse_price(self, price_str: str) -> float:
-        """
-        Parse a price string that may use either , or . as decimal separator.
-
-        Args:
-            price_str: String representing a price, possibly with "," as decimal separator
-
-        Returns:
-            Parsed price as a float
-        """
-        if not price_str or price_str.strip() == "":
-            return 0.0
-
-        # Replace comma with dot for decimal point
-        normalized = price_str.replace(",", ".")
-
-        # Handle missing leading zero
-        if normalized.startswith("."):
-            normalized = "0" + normalized
-
-        try:
-            return float(normalized)
-        except ValueError:
-            logger.warning(f"Failed to parse price: {price_str}")
-            return 0.0
-
     def parse_csv(self, csv_content: str) -> List[PlodineProduct]:
         """
         Parses CSV content into PlodineProduct objects.
@@ -286,20 +242,20 @@ class PlodineCrawler:
         for row in reader:
             try:
                 # Parse prices, handling different decimal separators
-                price = self.parse_price(row.get("Maloprodajna cijena", ""))
-                unit_price = self.parse_price(row.get("Cijena po JM", ""))
+                price = parse_price(row.get("Maloprodajna cijena", ""))
+                unit_price = parse_price(row.get("Cijena po JM", ""))
                 special_price_str = row.get(
                     "MPC za vrijeme posebnog oblika prodaje", ""
                 )
                 special_price = (
-                    self.parse_price(special_price_str) if special_price_str else None
+                    parse_price(special_price_str) if special_price_str else None
                 )
-                best_price_30 = self.parse_price(
+                best_price_30 = parse_price(
                     row.get("Najniza cijena u poslj. 30 dana", "")
                 )
                 anchor_price_str = row.get("Sidrena cijena na 2.5.2025", "")
                 anchor_price = (
-                    self.parse_price(anchor_price_str) if anchor_price_str else None
+                    parse_price(anchor_price_str) if anchor_price_str else None
                 )
 
                 product = PlodineProduct(
@@ -400,9 +356,8 @@ class PlodineCrawler:
 
             total_products = sum(len(store.items) for store in stores)
             t1 = time()
-            dt = int(t1 - t0)
-            logger.info(
-                f"Completed Plodine crawl for {date} in {dt}s, found {len(stores)} stores with {total_products} total products"
+            log_operation_timing(
+                "crawl", "Plodine", date, t0, t1, len(stores), total_products
             )
             return date, stores
 
