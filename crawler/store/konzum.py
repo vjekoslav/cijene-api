@@ -34,7 +34,7 @@ class KonzumStore(BaseModel):
     Represents a Konzum store with its products.
     """
 
-    name: str
+    store_type: str
     street_address: str
     zipcode: str
     city: str
@@ -306,28 +306,70 @@ class KonzumCrawler:
             title = urllib.parse.unquote(query_params["title"][0])
             logger.debug(f"Decoded title: {title}")
 
-            # Split by comma to get components
-            parts = title.split(",")
-            if len(parts) < 2:
-                logger.warning(f"Invalid title format, insufficient parts: {title}")
-                return None
+            # Check if this is the new format (contains spaces)
+            if " " in title:
+                # New format: HIPERMARKET,TRG HRVATSKIH REDARSTVENIKA 1 47000 KARLOVAC,1300,454,20250516080228.CSV
+                parts = title.split(",")
+                if len(parts) < 2:
+                    logger.warning(f"Invalid title format, insufficient parts: {title}")
+                    return None
 
-            # Extract store name and address
-            store_name = self.to_camel_case(parts[0])
-            address_str = parts[1]
+                # Extract store type
+                store_type = self.to_camel_case(parts[0])
 
-            # Parse address components
-            address_parts = address_str.split("_")
-            if len(address_parts) < 3:
-                logger.warning(f"Invalid address format: {address_str}")
-                return None
+                # Extract address and use regex to identify zipcode and city
+                address_string = parts[1]
+                import re
 
-            street_address = self.to_camel_case(address_parts[0])
-            zipcode = address_parts[1]
-            city = self.to_camel_case("_".join(address_parts[2:]))
+                # Look for 4+ digit sequence which is the zipcode
+                zipcode_match = re.search(r"\b\d{4,}\b", address_string)
+
+                if zipcode_match:
+                    zipcode = zipcode_match.group(0)
+                    # Split address at the zipcode
+                    address_parts = address_string.split(zipcode)
+
+                    if len(address_parts) >= 2:
+                        # First part is street address (trim trailing spaces)
+                        street_address = self.to_camel_case(address_parts[0].strip())
+                        # Second part is city (trim leading spaces)
+                        city = self.to_camel_case(address_parts[1].strip())
+                    else:
+                        logger.warning(
+                            f"Could not parse address properly: {address_string}"
+                        )
+                        street_address = self.to_camel_case(address_string)
+                        city = ""
+                else:
+                    logger.warning(
+                        f"Could not find zipcode in address: {address_string}"
+                    )
+                    street_address = self.to_camel_case(address_string)
+                    zipcode = ""
+                    city = ""
+            else:
+                # Old format: Split by comma to get components
+                parts = title.split(",")
+                if len(parts) < 2:
+                    logger.warning(f"Invalid title format, insufficient parts: {title}")
+                    return None
+
+                # Extract store type and address
+                store_type = self.to_camel_case(parts[0])
+                address_str = parts[1]
+
+                # Parse address components
+                address_parts = address_str.split("_")
+                if len(address_parts) < 3:
+                    logger.warning(f"Invalid address format: {address_str}")
+                    return None
+
+                street_address = self.to_camel_case(address_parts[0])
+                zipcode = address_parts[1]
+                city = self.to_camel_case("_".join(address_parts[2:]))
 
             store = KonzumStore(
-                name=store_name,
+                store_type=store_type,
                 street_address=street_address,
                 zipcode=zipcode,
                 city=city,
@@ -335,7 +377,7 @@ class KonzumCrawler:
             )
 
             logger.info(
-                f"Parsed store: {store.name}, {store.street_address}, {store.zipcode}, {store.city}"
+                f"Parsed store: {store.store_type}, {store.street_address}, {store.zipcode}, {store.city}"
             )
             return store
 
