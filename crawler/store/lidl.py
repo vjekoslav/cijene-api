@@ -373,4 +373,3 @@ if __name__ == "__main__":
     crawler = LidlCrawler()
     current_date = datetime.date.today()
     price_date, stores = crawler.get_all_products(current_date)
-    print(stores[0])

@@ -447,7 +447,6 @@ class KonzumCrawler:
                     products = self.parse_csv(csv_content)
                     store.items = products
                     stores.append(store)
-                    break
 
                 except Exception as e:
                     logger.error(f"Error processing CSV from {url}: {str(e)}")
