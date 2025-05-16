@@ -75,20 +75,23 @@ class KonzumCrawler:
         )
         return response.text
 
-    def extract_price_date(self, soup: BeautifulSoup) -> Tuple[str, Optional[Any]]:
+    def extract_price_date(
+        self, soup: BeautifulSoup, target_date: datetime.date
+    ) -> Tuple[str, Optional[Any]]:
         """
-        Extracts the price date div from the BeautifulSoup object.
+        Extracts the price date div from the BeautifulSoup object that matches the target date.
 
         Args:
             soup: BeautifulSoup object of the price list page
+            target_date: The date to search for in the price list
 
         Returns:
             Tuple containing the date string and the date div element
 
         Raises:
-            ValueError: If the date div cannot be found
+            ValueError: If the date div matching the target date cannot be found
         """
-        logger.debug("Extracting price date from page")
+        logger.debug(f"Extracting price date from page matching {target_date}")
 
         # Find all divs with data-tab-type attribute
         date_divs = soup.find_all("div", attrs={"data-tab-type": True})
@@ -98,9 +101,29 @@ class KonzumCrawler:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        # Use the first date div (most recent usually)
-        date_div = date_divs[0]
-        date_value = date_div.get("data-tab-type")
+        # Format target date to match expected format (YYYYMMDD)
+        target_date_str = target_date.strftime("%Y%m%d")
+
+        # Find the div that matches the target date
+        matching_div = None
+        date_value = None
+
+        for div in date_divs:
+            div_date = div.get("data-tab-type")
+            if div_date == target_date_str:
+                matching_div = div
+                date_value = div_date
+                break
+
+        if not matching_div:
+            available_dates = [
+                div.get("data-tab-type")
+                for div in date_divs
+                if div.get("data-tab-type")
+            ]
+            error_msg = f"No price list found for date {target_date_str}. Available dates: {', '.join(available_dates)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         if not date_value:
             error_msg = "Date value is empty"
@@ -108,7 +131,7 @@ class KonzumCrawler:
             raise ValueError(error_msg)
 
         logger.info(f"Found price date: {date_value}")
-        return date_value, date_div
+        return date_value, matching_div
 
     def find_csv_links(self, date_div: Any) -> List[str]:
         """
@@ -202,9 +225,12 @@ class KonzumCrawler:
         logger.debug(f"Parsed {len(products)} products from CSV")
         return products
 
-    def get_index(self) -> Tuple[datetime.date, List[str]]:
+    def get_index(self, target_date: datetime.date) -> Tuple[datetime.date, List[str]]:
         """
-        Fetches and parses the price list index page.
+        Fetches and parses the price list index page for the specified date.
+
+        Args:
+            target_date: The date to search for in the price list
 
         Returns:
             Tuple containing:
@@ -212,16 +238,17 @@ class KonzumCrawler:
                 - urls: List of CSV download URLs
 
         Raises:
-            ValueError: If the index page cannot be fetched or parsed
+            ValueError: If the index page cannot be fetched or parsed or if no price list
+                      is found for the target date
         """
-        logger.info("Parsing Konzum price list index page")
+        logger.info(f"Parsing Konzum price list index page for date: {target_date}")
 
         # Fetch and parse the price list page
         html_content = self.fetch_index()
         soup = BeautifulSoup(html_content, "html.parser")
 
-        # Extract the price date and div
-        date_value, date_div = self.extract_price_date(soup)
+        # Extract the price date and div for the target date
+        date_value, date_div = self.extract_price_date(soup, target_date)
 
         # Convert string date to datetime.date object
         date_obj = datetime.datetime.strptime(date_value, "%Y%m%d").date()
@@ -316,9 +343,16 @@ class KonzumCrawler:
             logger.error(f"Failed to parse store from URL {url}: {str(e)}")
             return None
 
-    def get_all_products(self) -> Tuple[datetime.date, List[KonzumStore]]:
+    def get_all_products(
+        self,
+        target_date: datetime.date = datetime.date.today(),
+    ) -> Tuple[datetime.date, List[KonzumStore]]:
         """
         Main method to fetch and parse all products from Konzum's price lists.
+
+        Args:
+            target_date: The date to search for in the price list.
+                        If None, uses the current date.
 
         Returns:
             Tuple with the date and the list of KonzumStore objects,
@@ -326,13 +360,17 @@ class KonzumCrawler:
 
         Raises:
             ValueError: If the price list page cannot be fetched or parsed
+                      or if no price list is found for the target date
         """
-        logger.info("Starting Konzum product crawl")
+        if target_date is None:
+            target_date = datetime.date.today()
+
+        logger.info(f"Starting Konzum product crawl for date: {target_date}")
         t0 = time()
 
         try:
             # Parse the index page to get date and CSV links
-            price_date, csv_links = self.get_index()
+            price_date, csv_links = self.get_index(target_date)
 
             stores = []
 
@@ -380,4 +418,5 @@ class KonzumCrawler:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     crawler = KonzumCrawler()
-    price_date, stores = crawler.get_all_products()
+    current_date = datetime.date.today()
+    price_date, stores = crawler.get_all_products(current_date)
