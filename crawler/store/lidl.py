@@ -10,42 +10,11 @@ from typing import List, Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
 
+from crawler.store.models import Store, Product
 from crawler.store.utils import parse_price, log_operation_timing, to_camel_case
 
 logger = logging.getLogger(__name__)
-
-
-class LidlProduct(BaseModel):
-    """
-    Represents a product from Lidl's price list.
-    """
-
-    product: str  # NAZIV
-    product_id: str  # ŠIFRA
-    brand: str  # MARKA
-    quantity: str  # NETO_KOLIČINA
-    unit: str  # JEDINICA_MJERE
-    packaging: str  # PAKIRANJE
-    price: Decimal  # MALOPRODAJNA_CIJENA
-    unit_price: Decimal  # CIJENA_ZA_JEDINICU_MJERE
-    barcode: str  # BARKOD
-    category: str  # KATEGORIJA_PROIZVODA
-    anchor_price: Optional[Decimal] = None  # Sidrena_cijena_na_02.05.2025
-
-
-class LidlStore(BaseModel):
-    """
-    Represents a Lidl store with its products.
-    """
-
-    name: str  # Derived from city (e.g., "Lidl Jastrebarsko")
-    store_type: str  # Always "Supermarket"
-    city: str  # Parsed from filename
-    street_address: str  # Parsed from filename
-    zipcode: str  # Parsed from filename
-    items: List[LidlProduct] = Field(default_factory=list)
 
 
 class LidlCrawler:
@@ -178,15 +147,15 @@ class LidlCrawler:
         logger.debug(f"Successfully extracted {len(csv_files)} CSV files from ZIP")
         return csv_files
 
-    def parse_store_from_filename(self, filename: str) -> Optional[LidlStore]:
+    def parse_store_from_filename(self, filename: str) -> Optional[Store]:
         """
-        Extract store information from CSV filename using regex.
+        Extract store information from CSV filename using filename parts.
 
         Args:
             filename: Name of the CSV file with store information
 
         Returns:
-            LidlStore object with parsed store information, or None if parsing fails
+            Store object with parsed store information, or None if parsing fails
         """
         logger.debug(f"Parsing store information from filename: {filename}")
 
@@ -200,8 +169,7 @@ class LidlCrawler:
                 logger.warning(f"Not enough parts in filename: {filename}")
                 return None
 
-            # The city is in the first part after the "Supermarket NNN" prefix
-            # We need to extract it from something like "Supermarket 104"
+            # The first part should start with "Supermarket"
             first_part = parts[0]
             if not first_part.startswith("Supermarket"):
                 logger.warning(f"Filename doesn't start with 'Supermarket': {filename}")
@@ -218,9 +186,12 @@ class LidlCrawler:
 
             # Format the store information
             store_name = f"Lidl {city}"
-            store_type = "Supermarket"
+            store_type = "supermarket"
+            store_id = first_part.replace("Supermarket", "").strip()
 
-            store = LidlStore(
+            store = Store(
+                chain="lidl",
+                store_id=store_id,
                 name=store_name,
                 store_type=store_type,
                 city=city,
@@ -238,15 +209,15 @@ class LidlCrawler:
             logger.error(f"Failed to parse store from filename {filename}: {str(e)}")
             return None
 
-    def parse_csv(self, csv_content: str) -> List[LidlProduct]:
+    def parse_csv(self, csv_content: str) -> List[Product]:
         """
-        Parses CSV content into LidlProduct objects.
+        Parses CSV content into unified Product objects.
 
         Args:
             csv_content: CSV content as a string
 
         Returns:
-            List of LidlProduct objects
+            List of Product objects
         """
         logger.debug("Parsing CSV content")
 
@@ -259,14 +230,13 @@ class LidlCrawler:
                 if "Nije_bilo_u_prodaji" in anchor_price:
                     anchor_price = None
 
-                # Map CSV columns directly to product fields
-                product = LidlProduct(
+                product = Product(
                     product=row.get("NAZIV", ""),
                     product_id=row.get("ŠIFRA", ""),
                     brand=row.get("MARKA", ""),
                     quantity=row.get("NETO_KOLIČINA", ""),
                     unit=row.get("JEDINICA_MJERE", ""),
-                    packaging=row.get("PAKIRANJE", ""),
+                    packaging=row.get("PAKIRANJE", None),
                     price=parse_price(row.get("MALOPRODAJNA_CIJENA", "")),
                     unit_price=parse_price(row.get("CIJENA_ZA_JEDINICU_MJERE", "")),
                     barcode=row.get("BARKOD", ""),
@@ -297,23 +267,20 @@ class LidlCrawler:
             httpx.RequestError: If there's an issue with network requests.
             zipfile.BadZipFile: If the downloaded file is not a valid ZIP.
         """
-        # Fetch the price list index page
         html_content = self.fetch_index()
 
-        # Find the ZIP URL for the specified date
         zip_url = self.find_zip_url_for_date(html_content, date)
         if not zip_url:
             error_msg = f"No price list ZIP found for date {date}"
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        # Download and extract the ZIP file
         csv_files = self.download_and_extract_zip(zip_url)
         return csv_files
 
     def get_all_products(
         self, date: datetime.date
-    ) -> Tuple[datetime.date, List[LidlStore]]:
+    ) -> Tuple[datetime.date, List[Store]]:
         """
         Main method to fetch and parse all products from Lidl's price lists.
 
@@ -321,7 +288,7 @@ class LidlCrawler:
             date: The date for which to fetch the price list
 
         Returns:
-            Tuple with the date and the list of LidlStore objects,
+            Tuple with the date and the list of Store objects,
             each containing its products.
 
         Raises:
@@ -335,10 +302,8 @@ class LidlCrawler:
 
             stores = []
 
-            # Process each CSV file
             for filename, content in csv_files:
                 try:
-                    # Parse store information from the filename
                     store = self.parse_store_from_filename(filename)
                     if not store:
                         logger.warning(
@@ -346,7 +311,6 @@ class LidlCrawler:
                         )
                         continue
 
-                    # Parse CSV and add products to the store
                     products = self.parse_csv(content)
                     store.items = products
                     stores.append(store)
@@ -369,7 +333,6 @@ class LidlCrawler:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    # Example usage with a specific date
     crawler = LidlCrawler()
     current_date = datetime.date.today()
     price_date, stores = crawler.get_all_products(current_date)
