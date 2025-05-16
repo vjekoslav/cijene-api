@@ -9,42 +9,10 @@ from typing import List, Optional, Tuple, Any
 
 import httpx
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
-
+from crawler.store.models import Product, Store
 from crawler.store.utils import to_camel_case, log_operation_timing, parse_price
 
 logger = logging.getLogger(__name__)
-
-
-class KonzumProduct(BaseModel):
-    """
-    Represents a product from Konzum's price list.
-    """
-
-    product: str
-    product_id: str
-    brand: str
-    quantity: str
-    unit: str
-    price: Decimal
-    unit_price: Decimal
-    barcode: str
-    category: str
-    special_price: Optional[Decimal] = None  # "MPC ZA VRIJEME POSEBNOG OBLIKA PRODAJE"
-    best_price_30: Optional[Decimal] = None  # "NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA"
-    anchor_price: Optional[Decimal] = None  # "SIDRENA CIJENA NA 2.5.2025"
-
-
-class KonzumStore(BaseModel):
-    """
-    Represents a Konzum store with its products.
-    """
-
-    store_type: str
-    street_address: str
-    zipcode: str
-    city: str
-    items: List[KonzumProduct] = Field(default_factory=list)
 
 
 class KonzumCrawler:
@@ -187,15 +155,15 @@ class KonzumCrawler:
             logger.error(f"Failed to download CSV from {url}: {str(e)}")
             return None
 
-    def parse_csv(self, csv_content: str) -> List[KonzumProduct]:
+    def parse_csv(self, csv_content: str) -> List[Product]:
         """
-        Parses CSV content into KonzumProduct objects.
+        Parses CSV content into Product objects.
 
         Args:
             csv_content: CSV content as a string
 
         Returns:
-            List of KonzumProduct objects
+            List of Product objects
         """
         logger.debug("Parsing CSV content")
 
@@ -231,7 +199,7 @@ class KonzumCrawler:
                     parse_price(anchor_price_str) if anchor_price_str else None
                 )
 
-                product = KonzumProduct(
+                product = Product(
                     product=row.get("NAZIV PROIZVODA", ""),
                     product_id=row.get("ŠIFRA PROIZVODA", ""),
                     brand=row.get("MARKA PROIZVODA", ""),
@@ -289,7 +257,7 @@ class KonzumCrawler:
         )
         return date_obj, csv_links
 
-    def parse_store_from_url(self, url: str) -> Optional[KonzumStore]:
+    def parse_store_from_url(self, url: str) -> Optional[Store]:
         """
         Extracts store information from a CSV download URL.
 
@@ -297,7 +265,7 @@ class KonzumCrawler:
             url: CSV download URL with store information in the query parameters
 
         Returns:
-            KonzumStore object with parsed store information, or None if parsing fails
+            Store object with parsed store information, or None if parsing fails
         """
         logger.debug(f"Parsing store information from URL: {url}")
 
@@ -318,12 +286,16 @@ class KonzumCrawler:
             if " " in title:
                 # New format: HIPERMARKET,TRG HRVATSKIH REDARSTVENIKA 1 47000 KARLOVAC,1300,454,20250516080228.CSV
                 parts = title.split(",")
-                if len(parts) < 2:
+                if len(parts) < 2:  # Ensure we have at least store_type and address
                     logger.warning(f"Invalid title format, insufficient parts: {title}")
                     return None
 
                 # Extract store type
                 store_type = to_camel_case(parts[0])
+
+                # Extract store ID (third part)
+                store_id = parts[2] if len(parts) > 2 else "unknown"
+                logger.debug(f"Extracted store_id: {store_id} from new format title")
 
                 # Extract address and use regex to identify zipcode and city
                 address_string = parts[1]
@@ -358,13 +330,17 @@ class KonzumCrawler:
             else:
                 # Old format: Split by comma to get components
                 parts = title.split(",")
-                if len(parts) < 2:
+                if len(parts) < 2:  # Ensure we have at least store_type and address
                     logger.warning(f"Invalid title format, insufficient parts: {title}")
                     return None
 
                 # Extract store type and address
                 store_type = to_camel_case(parts[0])
                 address_str = parts[1]
+
+                # Extract store ID (third part)
+                store_id = parts[2] if len(parts) > 2 else "unknown"
+                logger.debug(f"Extracted store_id: {store_id} from old format title")
 
                 # Parse address components
                 address_parts = address_str.split("_")
@@ -376,7 +352,13 @@ class KonzumCrawler:
                 zipcode = address_parts[1]
                 city = to_camel_case("_".join(address_parts[2:]))
 
-            store = KonzumStore(
+            # Clean and validate store_id
+            store_id = store_id.strip()
+
+            store = Store(
+                chain="konzum",
+                store_id=store_id,
+                name=f"Konzum {city}",
                 store_type=store_type,
                 street_address=street_address,
                 zipcode=zipcode,
@@ -396,7 +378,7 @@ class KonzumCrawler:
     def get_all_products(
         self,
         target_date: datetime.date = datetime.date.today(),
-    ) -> Tuple[datetime.date, List[KonzumStore]]:
+    ) -> Tuple[datetime.date, List[Store]]:
         """
         Main method to fetch and parse all products from Konzum's price lists.
 
@@ -405,7 +387,7 @@ class KonzumCrawler:
                         If None, uses the current date.
 
         Returns:
-            Tuple with the date and the list of KonzumStore objects,
+            Tuple with the date and the list of Store objects,
             each containing its products.
 
         Raises:
