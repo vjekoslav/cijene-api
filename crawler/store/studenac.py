@@ -10,43 +10,11 @@ from typing import List, Optional, Tuple
 
 import httpx
 from lxml import etree
-from pydantic import BaseModel, Field
 
+from crawler.store.models import Store, Product
 from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
 
 logger = logging.getLogger(__name__)
-
-
-class StudenacProduct(BaseModel):
-    """
-    Represents a product from Studenac's price list.
-    """
-
-    product: str
-    product_id: str
-    brand: str
-    quantity: str
-    unit: str
-    price: Decimal
-    unit_price: Decimal
-    special_price: Optional[Decimal] = None  # MaloprodajnaCijenaAkcija
-    best_price_30: Decimal  # NajnizaCijena
-    anchor_price: Optional[Decimal] = None  # SidrenaCijena
-    barcode: str
-    category: str
-
-
-class StudenacStore(BaseModel):
-    """
-    Represents a Studenac store with its products.
-    """
-
-    name: str
-    store_type: str
-    city: str
-    street_address: str
-    zipcode: str = ""
-    items: List[StudenacProduct] = Field(default_factory=list)
 
 
 class StudenacCrawler:
@@ -144,15 +112,15 @@ class StudenacCrawler:
             logger.error(f"Error parsing address {address}: {str(e)}")
             return to_camel_case(address), ""
 
-    def parse_xml(self, xml_content: bytes) -> Optional[StudenacStore]:
+    def parse_xml(self, xml_content: bytes) -> Optional[Store]:
         """
-        Parse XML content into a StudenacStore object.
+        Parse XML content into a unified Store object.
 
         Args:
             xml_content: XML content as bytes
 
         Returns:
-            StudenacStore object with parsed store and product information,
+            Store object with parsed store and product information,
             or None if parsing fails
         """
         logger.debug("Parsing XML content")
@@ -161,22 +129,25 @@ class StudenacCrawler:
             root = etree.fromstring(xml_content)
 
             # Extract store information
-            store_type = root.xpath("//ProdajniObjekt/Oblik/text()")[0]
+            store_type = root.xpath("//ProdajniObjekt/Oblik/text()")[0].lower()
+            store_id = root.xpath("//ProdajniObjekt/Oznaka/text()")[0]
             store_code = root.xpath("//ProdajniObjekt/Oznaka/text()")[0]
             address = root.xpath("//ProdajniObjekt/Adresa/text()")[0]
 
             street_address, city = self.parse_address(address)
 
-            store = StudenacStore(
+            store = Store(
+                chain="studenac",
                 name=f"Studenac {store_code}",
                 store_type=to_camel_case(store_type),
+                store_id=store_id,
                 city=city,
                 street_address=street_address,
                 items=[],
             )
 
             logger.debug(
-                f"Parsed store: {store.name}, {store.store_type}, {store.city}, {store.street_address}"
+                f"Parsed store: {store.name} ({store_id}), {store.store_type}, {store.city}, {store.street_address}"
             )
 
             # Extract product information
@@ -215,7 +186,7 @@ class StudenacCrawler:
                     barcode = get_text("Barkod/text()")
                     category = get_text("KategorijeProizvoda/text()")
 
-                    product = StudenacProduct(
+                    product = Product(
                         product=product_name,
                         product_id=product_id,
                         brand=brand,
@@ -245,7 +216,7 @@ class StudenacCrawler:
             logger.error(f"Failed to parse XML: {str(e)}")
             return None
 
-    def process_zip_file(self, zip_path: str) -> List[StudenacStore]:
+    def process_zip_file(self, zip_path: str) -> List[Store]:
         """
         Process all XML files in the ZIP file.
 
@@ -253,7 +224,7 @@ class StudenacCrawler:
             zip_path: Path to the downloaded ZIP file
 
         Returns:
-            List of StudenacStore objects
+            List of Store objects
         """
         logger.info(f"Processing ZIP file at {zip_path}")
         stores = []
@@ -288,7 +259,7 @@ class StudenacCrawler:
 
     def get_all_products(
         self, date: datetime.date
-    ) -> Tuple[datetime.date, List[StudenacStore]]:
+    ) -> Tuple[datetime.date, List[Store]]:
         """
         Main method to fetch and parse all products from Studenac's price lists.
 
@@ -296,7 +267,7 @@ class StudenacCrawler:
             date: The date for which to fetch the price list
 
         Returns:
-            Tuple with the date and the list of StudenacStore objects,
+            Tuple with the date and the list of Store objects,
             each containing its products.
 
         Raises:
