@@ -176,54 +176,64 @@ class TommyCrawler:
             JEDINICA_MJERE,NETO_KOLICINA,MPC,MPC_POSEBNA_PRODAJA,CIJENA_PO_JM,
             MPC_NAJNIZA_30,MPC_020525,DATUM_ULASKA_NOVOG_ARTIKLA,PRVA_CIJENA_NOVOG_ARTIKLA
         """
+        logger.debug("Parsing CSV content")
+
         products = []
-        row_count = 0
         success_count = 0
         error_count = 0
 
         try:
-            # Read CSV content using StringIO
+            # Read CSV content using StringIO and DictReader
             csv_file = io.StringIO(csv_content)
-            reader = csv.reader(csv_file)
+            reader = csv.DictReader(csv_file)
 
-            # Skip header row
-            header = next(reader, None)
-            if not header:
+            if not reader.fieldnames:
                 logger.warning("CSV file has no header row")
                 return products
 
-            logger.debug(f"CSV header: {header}")
+            logger.debug(f"CSV header: {reader.fieldnames}")
 
-            # Process each row
+            # Define expected field names
+            field_map = {
+                'barcode': 'BARKOD_ARTIKLA',
+                'product_id': 'SIFRA_ARTIKLA',
+                'product_name': 'NAZIV_ARTIKLA',
+                'brand': 'BRAND',
+                'category': 'ROBNA_STRUKTURA',
+                'unit': 'JEDINICA_MJERE',
+                'quantity': 'NETO_KOLICINA',
+                'price': 'MPC',
+                'special_price': 'MPC_POSEBNA_PRODAJA',
+                'unit_price': 'CIJENA_PO_JM',
+                'lowest_price_30days': 'MPC_NAJNIZA_30',
+                'anchor_price': 'MPC_020525',
+                'date_added': 'DATUM_ULASKA_NOVOG_ARTIKLA',
+                'initial_price': 'PRVA_CIJENA_NOVOG_ARTIKLA'
+            }
+
+            row_count = 0
             for row in reader:
                 row_count += 1
 
-                if len(row) < 11:
-                    logger.warning(
-                        f"Skipping invalid row {row_count} with insufficient columns: {row}"
-                    )
-                    error_count += 1
-                    continue
-
                 try:
                     # Extract mandatory fields from the row
-                    barcode = row[0].strip()
-                    product_id = row[1].strip()
-                    product_name = row[2].strip()
-                    brand = row[3].strip()
-                    category = row[4].strip()
-                    unit = row[5].strip()
-                    quantity = row[6].strip()
+                    barcode = row.get(field_map['barcode'], '').strip()
+                    product_id = row.get(field_map['product_id'], '').strip()
+                    product_name = row.get(field_map['product_name'], '').strip()
+                    brand = row.get(field_map['brand'], '').strip()
+                    category = row.get(field_map['category'], '').strip()
+                    unit = row.get(field_map['unit'], '').strip()
+                    quantity = row.get(field_map['quantity'], '').strip()
 
                     # Parse price fields with proper error handling
                     try:
-                        price = parse_price(row[7])
+                        price = parse_price(row.get(field_map['price'], '0'))
                     except Exception as e:
                         logger.warning(f"Failed to parse price in row {row_count}: {e}")
                         price = Decimal("0.00")
 
                     try:
-                        unit_price = parse_price(row[9])
+                        unit_price = parse_price(row.get(field_map['unit_price'], '0'))
                     except Exception as e:
                         logger.warning(
                             f"Failed to parse unit_price in row {row_count}: {e}"
@@ -237,30 +247,35 @@ class TommyCrawler:
                     initial_price = None
                     date_added = None
 
-                    if len(row) > 8 and row[8].strip():
+                    special_price_str = row.get(field_map['special_price'], '')
+                    if special_price_str.strip():
                         try:
-                            special_price = parse_price(row[8])
+                            special_price = parse_price(special_price_str)
                         except Exception:
                             pass
 
-                    if len(row) > 10 and row[10].strip():
+                    lowest_price_30days_str = row.get(field_map['lowest_price_30days'], '')
+                    if lowest_price_30days_str.strip():
                         try:
-                            lowest_price_30days = parse_price(row[10])
+                            lowest_price_30days = parse_price(lowest_price_30days_str)
                         except Exception:
                             pass
 
-                    if len(row) > 11 and row[11].strip():
+                    anchor_price_str = row.get(field_map['anchor_price'], '')
+                    if anchor_price_str.strip():
                         try:
-                            anchor_price = parse_price(row[11])
+                            anchor_price = parse_price(anchor_price_str)
                         except Exception:
                             pass
 
-                    if len(row) > 12 and row[12].strip():
-                        date_added = self.parse_date_string(row[12])
+                    date_added_str = row.get(field_map['date_added'], '')
+                    if date_added_str.strip():
+                        date_added = self.parse_date_string(date_added_str)
 
-                    if len(row) > 13 and row[13].strip():
+                    initial_price_str = row.get(field_map['initial_price'], '')
+                    if initial_price_str.strip():
                         try:
-                            initial_price = parse_price(row[13])
+                            initial_price = parse_price(initial_price_str)
                         except Exception:
                             pass
 
@@ -292,7 +307,7 @@ class TommyCrawler:
                         success_count += 1
                     else:
                         logger.warning(
-                            f"Skipping product in row {row_count} with missing required fields"
+                            f"Skipping product in row {row_count} with missing required fields: {row}"
                         )
                         error_count += 1
 
