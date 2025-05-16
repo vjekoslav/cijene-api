@@ -1,5 +1,6 @@
 import csv
 import datetime
+from decimal import Decimal
 from time import time
 import logging
 import urllib.parse
@@ -25,13 +26,13 @@ class KonzumProduct(BaseModel):
     brand: str
     quantity: str
     unit: str
-    price: float
-    unit_price: float
+    price: Decimal
+    unit_price: Decimal
     barcode: str
     category: str
-    special_price: Optional[float] = None  # "MPC ZA VRIJEME POSEBNOG OBLIKA PRODAJE"
-    best_price_30: Optional[float] = None  # "NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA"
-    anchor_price: Optional[float] = None  # "SIDRENA CIJENA NA 2.5.2025"
+    special_price: Optional[Decimal] = None  # "MPC ZA VRIJEME POSEBNOG OBLIKA PRODAJE"
+    best_price_30: Optional[Decimal] = None  # "NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA"
+    anchor_price: Optional[Decimal] = None  # "SIDRENA CIJENA NA 2.5.2025"
 
 
 class KonzumStore(BaseModel):
@@ -203,7 +204,7 @@ class KonzumCrawler:
 
         for row in reader:
             try:
-                # Convert potential empty strings to 0.0 for numeric fields
+                # Convert potential empty strings to Decimal("0.00") for numeric fields
                 maloprodajna_cijena = parse_price(row.get("MALOPRODAJNA CIJENA", "0"))
                 cijena_za_jedinicu = parse_price(
                     row.get("CIJENA ZA JEDINICU MJERE", "0")
@@ -216,13 +217,15 @@ class KonzumCrawler:
                 best_price_30_str = row.get("NAJNIŽA CIJENA U POSLJEDNJIH 30 DANA", "")
                 anchor_price_str = row.get("SIDRENA CIJENA NA 2.5.2025", "")
 
-                # Convert to float or None if empty
+                # Convert to Decimal or None if empty
                 # Parse price fields if present
                 special_price = (
                     parse_price(special_price_str) if special_price_str else None
                 )
                 best_price_30 = (
-                    parse_price(best_price_30_str) if best_price_30_str else 0.0
+                    parse_price(best_price_30_str)
+                    if best_price_30_str
+                    else Decimal("0.00")
                 )
                 anchor_price = (
                     parse_price(anchor_price_str) if anchor_price_str else None

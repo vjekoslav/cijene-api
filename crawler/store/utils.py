@@ -1,6 +1,7 @@
 import datetime
 import logging
 import re
+from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ def to_camel_case(text: str) -> str:
     return " ".join(words)
 
 
-def parse_price(price_str: str) -> float:
+def parse_price(price_str: str) -> Decimal:
     """
     Parse a price string that may use either , or . as decimal separator.
 
@@ -35,10 +36,10 @@ def parse_price(price_str: str) -> float:
         price_str: String representing a price, possibly with "," as decimal separator
 
     Returns:
-        Parsed price as a float
+        Parsed price as a Decimal with 2 decimal places
     """
     if not price_str or price_str.strip() == "":
-        return 0.0
+        return Decimal("0.00")
 
     # Replace comma with dot for decimal point
     normalized = price_str.replace(",", ".")
@@ -48,10 +49,12 @@ def parse_price(price_str: str) -> float:
         normalized = "0" + normalized
 
     try:
-        return float(normalized)
-    except ValueError:
+        # Convert to Decimal and round to 2 decimal places
+        price = Decimal(normalized).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        return price
+    except (ValueError, InvalidOperation):
         logger.warning(f"Failed to parse price: {price_str}")
-        return 0.0
+        return Decimal("0.00")
 
 
 def log_operation_timing(

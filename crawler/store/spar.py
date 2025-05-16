@@ -2,6 +2,7 @@ import csv
 import datetime
 import logging
 import re
+from decimal import Decimal
 from io import StringIO
 from time import time
 from typing import Dict, List, Optional, Tuple
@@ -24,11 +25,11 @@ class SparProduct(BaseModel):
     brand: str
     quantity: str
     unit: str
-    price: float
-    unit_price: float
-    best_price_30: float  # Najniža cijena u posljednjih 30 dana
+    price: Decimal
+    unit_price: Decimal
+    best_price_30: Decimal  # Najniža cijena u posljednjih 30 dana
     anchor_price_date: Optional[str] = None  # Datum sidrene cijene
-    anchor_price: Optional[float] = None  # Sidrena cijena
+    anchor_price: Optional[Decimal] = None  # Sidrena cijena
     barcode: str
     category: str
 
@@ -185,7 +186,7 @@ class SparCrawler:
 
         for row in reader:
             try:
-                # Convert potential empty strings to 0.0 for numeric fields
+                # Convert potential empty strings to Decimal with 2 decimal places
                 price = parse_price(row.get("MPC", "0"))
                 unit_price = parse_price(row.get("cijena za jedinicu mjere", "0"))
                 best_price_30 = parse_price(

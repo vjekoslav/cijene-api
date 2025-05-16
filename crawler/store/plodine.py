@@ -4,6 +4,7 @@ import logging
 import re
 import tempfile
 import zipfile
+from decimal import Decimal
 from io import StringIO
 from time import time
 from typing import List, Optional, Tuple
@@ -27,11 +28,11 @@ class PlodineProduct(BaseModel):
     brand: str  # Marka proizvoda
     quantity: str  # Neto kolicina
     unit: str  # Jedinica mjere
-    price: float  # Maloprodajna cijena
-    unit_price: float  # Cijena po JM
-    special_price: Optional[float] = None  # MPC za vrijeme posebnog oblika prodaje
-    best_price_30: float  # Najniza cijena u poslj. 30 dana
-    anchor_price: Optional[float] = None  # Sidrena cijena na 2.5.2025
+    price: Decimal  # Maloprodajna cijena
+    unit_price: Decimal  # Cijena po JM
+    special_price: Optional[Decimal] = None  # MPC za vrijeme posebnog oblika prodaje
+    best_price_30: Decimal  # Najniza cijena u poslj. 30 dana
+    anchor_price: Optional[Decimal] = None  # Sidrena cijena na 2.5.2025
     barcode: str  # Barkod
     category: str  # Kategorija proizvoda
 
