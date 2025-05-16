@@ -11,43 +11,11 @@ from typing import List, Optional, Tuple
 
 import httpx
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, Field
 
+from crawler.store.models import Store, Product
 from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
 
 logger = logging.getLogger(__name__)
-
-
-class PlodineProduct(BaseModel):
-    """
-    Represents a product from Plodine's price list.
-    """
-
-    product: str  # Naziv proizvoda
-    product_id: str  # Sifra proizvoda
-    brand: str  # Marka proizvoda
-    quantity: str  # Neto kolicina
-    unit: str  # Jedinica mjere
-    price: Decimal  # Maloprodajna cijena
-    unit_price: Decimal  # Cijena po JM
-    special_price: Optional[Decimal] = None  # MPC za vrijeme posebnog oblika prodaje
-    best_price_30: Decimal  # Najniza cijena u poslj. 30 dana
-    anchor_price: Optional[Decimal] = None  # Sidrena cijena na 2.5.2025
-    barcode: str  # Barkod
-    category: str  # Kategorija proizvoda
-
-
-class PlodineStore(BaseModel):
-    """
-    Represents a Plodine store with its products.
-    """
-
-    name: str  # Derived from location (city)
-    store_type: str  # supermarket or hipermarket
-    city: str
-    street_address: str
-    zipcode: str
-    items: List[PlodineProduct] = Field(default_factory=list)
 
 
 class PlodineCrawler:
@@ -160,9 +128,6 @@ class PlodineCrawler:
                                 # Decode from ISO-8859-2 (common encoding for Croatian text)
                                 content = f.read().decode("iso-8859-2")
                                 csv_files.append((filename, content))
-                                logger.debug(
-                                    f"Extracted CSV: {filename}, size: {len(content)} bytes"
-                                )
                         except Exception as e:
                             logger.error(
                                 f"Failed to extract or decode CSV file {filename}: {str(e)}"
@@ -175,7 +140,7 @@ class PlodineCrawler:
         logger.debug(f"Successfully extracted {len(csv_files)} CSV files from ZIP")
         return csv_files
 
-    def parse_store_from_filename(self, filename: str) -> Optional[PlodineStore]:
+    def parse_store_from_filename(self, filename: str) -> Optional[Store]:
         """
         Extract store information from CSV filename using regex.
 
@@ -183,21 +148,21 @@ class PlodineCrawler:
             filename: Name of the CSV file with store information
 
         Returns:
-            PlodineStore object with parsed store information, or None if parsing fails
+            Store object with parsed store information, or None if parsing fails
         """
         logger.debug(f"Parsing store information from filename: {filename}")
 
         try:
             # Regular expression pattern to extract store information
             # Pattern for files like: SUPERMARKET_ULICA_FRANJE_TUDJMANA_83A_10450_JASTREBARSKO_063_2_16052025020937.csv
-            pattern = r"^(SUPERMARKET|HIPERMARKET)_(.+?)_(\d{4,})_([^_]+)_.*\.csv$"
+            pattern = r"^(SUPERMARKET|HIPERMARKET)_(.+?)_(\d{5})_([^_]+)_(\d+)_.*\.csv$"
             match = re.match(pattern, filename)
 
             if not match:
                 logger.warning(f"Failed to match filename pattern: {filename}")
                 return None
 
-            store_type, street_address_raw, zipcode, city = match.groups()
+            store_type, street_address_raw, zipcode, city, store_id = match.groups()
 
             # Format the extracted information
             formatted_store_type = to_camel_case(store_type)
@@ -207,7 +172,9 @@ class PlodineCrawler:
             # Use city as the store name
             store_name = f"Plodine {formatted_city}"
 
-            store = PlodineStore(
+            store = Store(
+                chain="plodine",
+                store_id=store_id,
                 name=store_name,
                 store_type=formatted_store_type,
                 city=formatted_city,
@@ -217,7 +184,7 @@ class PlodineCrawler:
             )
 
             logger.info(
-                f"Parsed store: {store.name}, {store.store_type}, {store.city}, {store.street_address}, {store.zipcode}"
+                f"Parsed store: {store.name} ({store.store_id}), {store.store_type}, {store.city}, {store.street_address}, {store.zipcode}"
             )
             return store
 
@@ -225,15 +192,15 @@ class PlodineCrawler:
             logger.error(f"Failed to parse store from filename {filename}: {str(e)}")
             return None
 
-    def parse_csv(self, csv_content: str) -> List[PlodineProduct]:
+    def parse_csv(self, csv_content: str) -> List[Product]:
         """
-        Parses CSV content into PlodineProduct objects.
+        Parses CSV content into Product objects.
 
         Args:
             csv_content: CSV content as a string
 
         Returns:
-            List of PlodineProduct objects
+            List of Product objects
         """
         logger.debug("Parsing CSV content")
 
@@ -259,7 +226,7 @@ class PlodineCrawler:
                     parse_price(anchor_price_str) if anchor_price_str else None
                 )
 
-                product = PlodineProduct(
+                product = Product(
                     product=row.get("Naziv proizvoda", ""),
                     product_id=row.get("Sifra proizvoda", ""),
                     brand=row.get("Marka proizvoda", ""),
@@ -313,7 +280,7 @@ class PlodineCrawler:
 
     def get_all_products(
         self, date: datetime.date
-    ) -> Tuple[datetime.date, List[PlodineStore]]:
+    ) -> Tuple[datetime.date, List[Store]]:
         """
         Main method to fetch and parse all products from Plodine's price lists.
 
@@ -321,7 +288,7 @@ class PlodineCrawler:
             date: The date for which to fetch the price list
 
         Returns:
-            Tuple with the date and the list of PlodineStore objects,
+            Tuple with the date and the list of Store objects,
             each containing its products.
 
         Raises:
@@ -369,8 +336,6 @@ class PlodineCrawler:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    # Example usage with a specific date
     crawler = PlodineCrawler()
-    # Use current date for testing
     current_date = datetime.date.today()
     price_date, stores = crawler.get_all_products(current_date)
