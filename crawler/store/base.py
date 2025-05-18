@@ -1,11 +1,15 @@
 from csv import DictReader
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from logging import getLogger
-from typing import Any
+from tempfile import TemporaryFile
+from typing import Any, BinaryIO, Generator
+from time import time
+from zipfile import ZipFile
+import datetime
 
 import httpx
 
-from .models import Product
+from .models import Product, Store
 
 logger = getLogger(__name__)
 
@@ -30,33 +34,106 @@ class BaseCrawler:
     def __init__(self):
         self.client = httpx.Client(timeout=30.0, follow_redirects=True)
 
-    def fetch_text(self, url: str) -> str:
+    def fetch_text(
+        self,
+        url: str,
+        encodings: list[str] | None = None,
+        prefix: str | None = None,
+    ) -> str:
         """
         Download a text file (web page or CSV) from the given URL.
 
         Args:
-            url: URL to download
+            url: URL to download from
+            encoding: Optional encoding to decode the content. If None, uses default.
 
         Returns:
             The content of the file as a string, or an empty string if the download fails.
         """
 
+        def try_decode(content: bytes) -> str:
+            for encoding in encodings:  # type: ignore
+                try:
+                    text = content.decode(encoding)
+                    if prefix and text.startswith(prefix):
+                        return text
+                except UnicodeDecodeError:
+                    continue
+            raise ValueError(f"Error decoding {url} - tried: {encodings}")
+
         logger.debug(f"Fetching {url}")
         try:
             response = self.client.get(url)
             response.raise_for_status()
-            return response.text
+            if encodings:
+                return try_decode(response.content)
+            else:
+                return response.text
         except httpx.RequestError as e:
             logger.error(f"Download from {url} failed: {e}", exc_info=True)
             raise
 
+    def fetch_binary(self, url: str, fp: BinaryIO):
+        """
+        Download a binary file to a provided location.
+
+        The location should be created using tempfile.NamedTemporaryFile
+
+        Args:
+            url: URL of the ZIP file to download
+
+        Returns:
+            Path to the downloaded ZIP file
+        """
+
+        logger.info(f"Downloading binary file from {url}")
+
+        MB = 1024 * 1024
+
+        t0 = time()
+        with self.client.stream("GET", url) as response:
+            response.raise_for_status()
+            total_mb = int(response.headers.get("content-length", 0)) / MB
+            logger.debug(f"File size: {total_mb} MB")
+
+            for chunk in response.iter_bytes(chunk_size=1 * MB):
+                fp.write(chunk)
+
+        t1 = time()
+        dt = int(t1 - t0)
+        logger.debug(f"Downloaded {total_mb} MB in {dt}s")
+
     def read_csv(self, text: str, delimiter: str = ",") -> DictReader:
         return DictReader(text.splitlines(), delimiter=delimiter)  # type: ignore
+
+    def get_zip_contents(
+        self, url: str, suffix: str
+    ) -> Generator[tuple[str, bytes], None, None]:
+        with TemporaryFile(mode="w+b") as temp_zip:
+            self.fetch_binary(url, temp_zip)
+            temp_zip.seek(0)
+
+            with ZipFile(temp_zip, "r") as zip_fp:
+                for file_info in zip_fp.infolist():
+                    if not file_info.filename.endswith(suffix):
+                        continue
+
+                    logger.debug(f"Processing file: {file_info.filename}")
+
+                    try:
+                        with zip_fp.open(file_info) as file:
+                            xml_content = file.read()
+                            yield (file_info.filename, xml_content)
+                    except Exception as e:
+                        logger.error(
+                            f"Error processing file {file_info.filename}: {e}",
+                            exc_info=True,
+                        )
 
     @staticmethod
     def parse_price(
         price_str: str | None,
-        required: bool = False,
+        required: bool = True,
     ) -> Decimal | None:
         """
         Parse a price string.
@@ -68,7 +145,7 @@ class BaseCrawler:
 
         Args:
             price_str: String representing the price, or None (no price)
-            required: If True, raises ValueError if the price is not valid
+            required: If True (default), raises ValueError if the price is not valid
                     If False, returns None for invalid prices
 
         Returns:
@@ -104,9 +181,9 @@ class BaseCrawler:
             else:
                 return None
 
-    def fix_csv_row(self, data: dict[str, Any]) -> dict[str, Any]:
+    def fix_product_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """
-        Do any cleaning or transformation of the CSV row data here.
+        Do any cleaning or transformation of the Product data here.
 
         Args:
             data: Dictionary containing the row data
@@ -114,6 +191,19 @@ class BaseCrawler:
         Returns:
             The cleaned or transformed data
         """
+        # Common fixups for all crawlers
+        if data["barcode"] == "":
+            data["barcode"] = f"{self.CHAIN}:{data['product_id']}"
+
+        if data["price"] is None:
+            if data["special_price"] is None:
+                raise ValueError("Price and special price are both missing")
+            else:
+                data["price"] = data["special_price"]
+
+        if data["anchor_price"] is not None and not data["anchor_price_date"]:
+            data["anchor_price_date"] = datetime.date(2025, 5, 2).isoformat()
+
         return data
 
     def parse_csv_row(self, row: dict) -> Product:
@@ -131,6 +221,7 @@ class BaseCrawler:
                     f"Failed to parse {field} from {column}: {err}",
                     exc_info=True,
                 )
+                raise
 
         for field, (column, is_required) in self.FIELD_MAP.items():
             value = row.get(column, "").strip()
@@ -138,15 +229,44 @@ class BaseCrawler:
                 raise ValueError(f"Missing required field: {field}")
             data[field] = value
 
-        self.fix_csv_row(data)
+        data = self.fix_product_data(data)
         return Product(**data)  # type: ignore
 
-    def parse_csv(self, content: str) -> list[Product]:
+    def parse_xml_product(self, elem: Any) -> Product:
+        def get_text(xpath: Any, default=""):
+            elements = elem.xpath(xpath)
+            return elements[0] if elements and elements[0] else default
+
+        data = {}
+        for field, (tagname, is_required) in self.PRICE_MAP.items():
+            value = get_text(f"{tagname}/text()")
+            try:
+                data[field] = self.parse_price(value, is_required)
+            except ValueError as err:
+                logger.warning(
+                    f"Failed to parse {field} from {tagname}: {err}",
+                    exc_info=True,
+                )
+                raise
+
+        for field, (tagname, is_required) in self.FIELD_MAP.items():
+            value = get_text(f"{tagname}/text()")
+            if not value and is_required:
+                raise ValueError(
+                    f"Missing required field: {field} (expected <{tagname}>)"
+                )
+            data[field] = value
+
+        data = self.fix_product_data(data)
+        return Product(**data)  # type: ignore
+
+    def parse_csv(self, content: str, delimiter: str = ",") -> list[Product]:
         """
         Parses CSV content into Product objects.
 
         Args:
             content: CSV content as a string
+            delimiter: Delimiter used in the CSV file (default: ",")
 
         Returns:
             List of Product objects
@@ -154,13 +274,38 @@ class BaseCrawler:
         logger.debug("Parsing CSV content")
 
         products = []
-        for row in self.read_csv(content):
+        for row in self.read_csv(content, delimiter=delimiter):
             try:
                 product = self.parse_csv_row(row)
             except Exception as e:
-                logger.warning(f"Failed to parse row: {row}: {str(e)}", exc_info=True)
+                logger.warning(f"Failed to parse row: {row}: {e}", exc_info=True)
                 continue
             products.append(product)
 
         logger.debug(f"Parsed {len(products)} products from CSV")
         return products
+
+    def get_all_products(self, date: datetime.date) -> list[Store]:
+        raise NotImplementedError()
+
+    def crawl(self, date: datetime.date) -> list[Store]:
+        name = self.CHAIN.capitalize()
+        logger.info(f"Starting {name} crawl for date: {date}")
+        t0 = time()
+
+        try:
+            stores = self.get_all_products(date)
+            n_prices = sum(len(store.items) for store in stores)
+
+            t1 = time()
+            dt = int(t1 - t0)
+
+            logger.info(
+                f"Completed {name} crawl for {date} in {dt}s, "
+                f"found {len(stores)} stores with {n_prices} total prices"
+            )
+            return stores
+
+        except Exception as e:
+            logger.error(f"Error crawling {name} price list: {e}", exc_info=True)
+            raise
