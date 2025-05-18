@@ -1,21 +1,18 @@
-import csv
 import datetime
 import logging
 import re
-from decimal import Decimal
-from io import StringIO
-from time import time
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
+from json import loads
 
-import httpx
 
-from crawler.store.models import Product, Store
-from crawler.store.utils import to_camel_case, parse_price, log_operation_timing
+from crawler.store.models import Store
+
+from .base import BaseCrawler
 
 logger = logging.getLogger(__name__)
 
 
-class SparCrawler:
+class SparCrawler(BaseCrawler):
     """
     Crawler for Spar/InterSpar store prices.
 
@@ -24,26 +21,98 @@ class SparCrawler:
     the CSVs, and returns a list of products.
     """
 
+    CHAIN = "spar"
     BASE_URL = "https://www.spar.hr"
+    ADDRESS_PATTERN = re.compile(
+        r"^([a-zA-Z]+)_([a-zA-Z0-9_]+)_(\d{4,5})_([a-zA-Z_]+)_"
+    )
+    CITIES = [
+        "varazdin",
+        "valpovo",
+        "sibenik",
+        "zadar",
+        "zagreb",
+        "cakovec",
+        "rijeka",
+        "split",
+        "kastav",
+        "selce",
+        "bibinje",
+        "labin",
+        "buje",
+        "krizevci",
+        "pozega",
+        "jastrebarsko",
+        "sesvetski_kraljevec",
+        "krapinske_toplice",
+        "novi_marof",
+        "ivanic_grad",
+        "vukovar",
+        "marija_bistrica",
+        "zapresic",
+        "velika_gorica",
+        "slavonski_brod",
+        "osijek",
+        "koprivnica",
+        "bjelovar",
+        "vinkovci",
+        "dakovo",
+        "orahovica",
+        "pakrac",
+        "suhopolje",
+        "daruvar",
+        "nasice",
+        "pula",
+        "opatija",
+        "porec",
+        "knin",
+        "zlatar",
+        "ivanec",
+        "popovaca",
+        "nin",
+        "donja_stubica",
+        "pregrada",
+        "cepin",
+        "ozalj",
+        "dugo_selo",
+        "gospic",
+    ]
+    PRICE_MAP = {
+        "price": ("MPC", False),
+        "unit_price": ("cijena za jedinicu mjere", False),
+        "special_price": ("MPC za vrijeme posebnog oblika prodaje", False),
+        "best_price_30": ("Najniža cijena u posljednjih 30 dana", False),
+        "anchor_price": ("sidrena cijena na 2.5.2025.", False),
+    }
 
-    def __init__(self) -> None:
-        """Initialize the Spar crawler."""
-        self.client = httpx.Client(timeout=30.0)
+    FIELD_MAP = {
+        "barcode": ("barkod", False),
+        "product": ("naziv", True),
+        "product_id": ("šifra", True),
+        "brand": ("marka", False),
+        "quantity": ("neto količina", False),
+        "unit": ("jedinica mjere", False),
+        "category": ("kategorija proizvoda", False),
+        "anchor_price_date": ("datum sidrene cijene", False),
+    }
 
-    def get_price_list_url(self, date: datetime.date) -> str:
-        """
-        Generate the URL for the price list index JSON.
+    # Required to detect text encoding
+    CSV_FIRST_LINE = (
+        "naziv;"
+        "šifra;"
+        "marka;"
+        "neto količina;"
+        "jedinica mjere;"
+        "MPC;"
+        "cijena za jedinicu mjere;"
+        "MPC za vrijeme posebnog oblika prodaje;"
+        "Najniža cijena u posljednjih 30 dana;"
+        "sidrena cijena na 2.5.2025.;"
+        "barkod;"
+        "kategorija proizvoda"
+    )
 
-        Args:
-            date: The date for which to get the price list
-
-        Returns:
-            URL for the price list index JSON
-        """
-        date_str = date.strftime("%Y%m%d")
-        return f"{self.BASE_URL}/datoteke_cjenici/Cjenik{date_str}.json"
-
-    def fetch_price_list_index(self, date: datetime.date) -> Dict:
+    def fetch_price_list_index(self, date: datetime.date) -> dict[str, str]:
         """
         Fetch the JSON index file with list of CSV files.
 
@@ -51,25 +120,28 @@ class SparCrawler:
             date: The date for which to fetch the price list index
 
         Returns:
-            Dictionary containing the price list index data
+            A dictionary with filename → URL mappings for CSV files.
 
         Raises:
             httpx.RequestError: If the request fails
         """
-        url = self.get_price_list_url(date)
-        logger.info(f"Fetching price list index from {url}")
-        response = self.client.get(url)
-        response.raise_for_status()
+        url = f"{self.BASE_URL}/datoteke_cjenici/Cjenik{date:%Y%m%d}.json"
+        content = self.fetch_text(url)
 
-        json_data = response.json()
-        count = json_data.get("count", 0)
+        json_data = loads(content)
+        files = json_data.get("files")
+        if not files:
+            logger.error("Price list index doesn't contain any files")
+            return {}
 
-        logger.debug(f"Successfully fetched price list index, found {count} files")
-        return json_data
+        return {info.get("name", ""): info.get("URL", "") for info in files}
 
     def parse_store_from_filename(self, filename: str) -> Optional[Store]:
         """
         Extract store information from CSV filename using regex.
+
+        Supported filename pattern:
+            `hipermarket_zadar_bleiburskih_zrtava_18_8701_interspar_zadar_0017_20250518_0330.csv`
 
         Args:
             filename: Name of the CSV file with store information
@@ -79,122 +151,39 @@ class SparCrawler:
         """
         logger.debug(f"Parsing store information from filename: {filename}")
 
-        try:
-            # Regular expression pattern to extract store information
-            pattern = r"^(hipermarket|supermarket)_([^_]+)_(.+?)_(\d{4,})_(.+?)_.*$"
-            match = re.match(pattern, filename)
+        match = self.ADDRESS_PATTERN.match(filename)
 
-            if not match:
-                logger.warning(f"Failed to match filename pattern: {filename}")
-                return None
-
-            store_type, city, street_address, store_id, store_name = match.groups()
-
-            # Format the extracted information
-            formatted_store_type = to_camel_case(store_type)
-            formatted_city = to_camel_case(city)
-            formatted_street_address = to_camel_case(street_address.replace("_", " "))
-            formatted_store_name = to_camel_case(store_name)
-
-            store = Store(
-                chain="spar",
-                store_id=store_id,
-                name=formatted_store_name,
-                store_type=formatted_store_type,
-                city=formatted_city,
-                street_address=formatted_street_address,
-                items=[],
-            )
-
-            logger.info(
-                f"Parsed store: {store.name}, {store.store_type}, {store.city}, {store.street_address}"
-            )
-            return store
-
-        except Exception as e:
-            logger.error(f"Failed to parse store from filename {filename}: {str(e)}")
+        if not match:
+            logger.warning(f"Failed to match filename pattern: {filename}")
             return None
 
-    def download_csv(self, url: str) -> Optional[str]:
-        """
-        Downloads a CSV file from the given URL and converts from ISO-8859-2 to UTF-8.
+        store_type, city_and_address, store_id, store_name = match.groups()
 
-        Args:
-            url: URL of the CSV file to download
+        for city in self.CITIES:
+            if city_and_address.lower().startswith(city):
+                store_city = city
+                store_address = city_and_address[len(city) + 1 :]
+                break
+        else:
+            # Assume city is the first word
+            store_city, store_address = city_and_address.split("_", 1)
 
-        Returns:
-            CSV content as a string, or None if download fails
-        """
-        logger.debug(f"Downloading CSV from {url}")
+        store = Store(
+            chain="spar",
+            store_id=store_id,
+            name=store_name.replace("_", " ").title(),
+            store_type=store_type.lower(),
+            city=store_city.replace("_", " ").title(),
+            street_address=store_address.replace("_", " ").title(),
+            items=[],
+        )
 
-        try:
-            response = self.client.get(url)
-            response.raise_for_status()
-            # Convert from ISO-8859-2 to UTF-8
-            csv_content = response.content.decode("iso-8859-2")
-            logger.debug(f"Successfully downloaded CSV, size: {len(csv_content)} bytes")
-            return csv_content
-        except Exception as e:
-            logger.error(f"Failed to download CSV from {url}: {str(e)}")
-            return None
+        logger.debug(
+            f"Parsed store: {store.name} ({store.store_id}), {store.store_type}, {store.city}, {store.street_address}"
+        )
+        return store
 
-    def parse_csv(self, csv_content: str) -> List[Product]:
-        """
-        Parses CSV content into Product objects.
-
-        Args:
-            csv_content: CSV content as a string
-
-        Returns:
-            List of Product objects
-        """
-        logger.debug("Parsing CSV content")
-
-        products = []
-        reader = csv.DictReader(StringIO(csv_content), delimiter=";")
-
-        for row in reader:
-            try:
-                # Convert potential empty strings to Decimal with 2 decimal places
-                price = parse_price(row.get("MPC", "0"))
-                unit_price = parse_price(row.get("cijena za jedinicu mjere", "0"))
-                best_price_30 = parse_price(
-                    row.get("Najniža cijena u posljednjih 30 dana", "0")
-                )
-
-                # Handle optional anchor price and date
-                anchor_price_str = row.get("sidrena cijena na 2.5.2025.", "")
-                anchor_price = (
-                    parse_price(anchor_price_str) if anchor_price_str else None
-                )
-
-                anchor_price_date = row.get("datum sidrene cijene", None)
-
-                product = Product(
-                    product=row.get("naziv", ""),
-                    product_id=row.get("šifra", ""),
-                    brand=row.get("marka", ""),
-                    quantity=row.get("neto količina", ""),
-                    unit=row.get("jedinica mjere", ""),
-                    price=price,
-                    unit_price=unit_price,
-                    best_price_30=best_price_30,
-                    anchor_price=anchor_price,
-                    anchor_price_date=anchor_price_date,
-                    barcode=row.get("barkod", ""),
-                    category=row.get("kategorija proizvoda", ""),
-                )
-                products.append(product)
-            except Exception as e:
-                logger.warning(f"Failed to parse row: {row}. Error: {str(e)}")
-                continue
-
-        logger.debug(f"Parsed {len(products)} products from CSV")
-        return products
-
-    def get_all_products(
-        self, date: datetime.date
-    ) -> Tuple[datetime.date, List[Store]]:
+    def get_all_products(self, date: datetime.date) -> list[Store]:
         """
         Main method to fetch and parse all products from Spar's price lists.
 
@@ -208,70 +197,40 @@ class SparCrawler:
         Raises:
             ValueError: If the price list index cannot be fetched or parsed
         """
-        logger.info(f"Starting Spar product crawl for date {date}")
-        t0 = time()
+        # Fetch the price list index
+        csv_files = self.fetch_price_list_index(date)
 
-        try:
-            # Fetch the price list index
-            price_list_index = self.fetch_price_list_index(date)
+        logger.info(f"Found {len(csv_files)} CSV files in the price list index")
 
-            # Extract CSV file URLs from the "files" list
-            csv_files = price_list_index.get("files", [])
-            logger.info(f"Found {len(csv_files)} CSV files in the price list index")
+        stores = []
 
-            stores = []
+        for filename, url in csv_files.items():
+            store = self.parse_store_from_filename(filename)
+            if not store:
+                logger.warning(f"Skipping CSV from {url} due to store parsing failure")
+                continue
 
-            # Process each CSV file
-            for file_info in csv_files:
-                try:
-                    filename = file_info.get("name", "")
-                    url = file_info.get("URL", "")
-
-                    if not url:
-                        logger.warning(f"Skipping file {filename} due to missing URL")
-                        continue
-
-                    # Parse store information from the filename
-                    store = self.parse_store_from_filename(filename)
-                    if not store:
-                        logger.warning(
-                            f"Skipping CSV from {url} due to store parsing failure"
-                        )
-                        continue
-
-                    # Download CSV
-                    csv_content = self.download_csv(url)
-                    if not csv_content:
-                        logger.warning(
-                            f"Skipping CSV from {url} due to download failure"
-                        )
-                        continue
-
-                    # Parse CSV and add products to the store
-                    products = self.parse_csv(csv_content)
-                    store.items = products
-                    stores.append(store)
-
-                except Exception as e:
-                    logger.error(
-                        f"Error processing CSV from {file_info.get('URL')}: {str(e)}"
-                    )
-                    continue
-
-            total_products = sum(len(store.items) for store in stores)
-            t1 = time()
-            log_operation_timing(
-                "crawl", "Spar", date, t0, t1, len(stores), total_products
+            csv_content = self.fetch_text(
+                url, ["iso-8859-2", "windows-1250"], self.CSV_FIRST_LINE
             )
-            return date, stores
+            if not csv_content:
+                logger.warning(f"Skipping CSV from {url} due to download failure")
+                continue
 
-        except Exception as e:
-            logger.error(f"Failed to fetch or parse Spar price list: {str(e)}")
-            raise
+            try:
+                products = self.parse_csv(csv_content, ";")
+                store.items = products
+                stores.append(store)
+            except Exception as e:
+                logger.error(f"Error processing CSV from {url}: {e}", exc_info=True)
+                continue
+
+        return stores
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     crawler = SparCrawler()
-    current_date = datetime.date.today()
-    price_date, stores = crawler.get_all_products(current_date)
+    stores = crawler.get_all_products(datetime.date.today())
+    print(stores[0])
+    print(stores[0].items[0])
