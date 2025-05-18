@@ -1,9 +1,8 @@
 import datetime
-from time import time
 import logging
 import urllib.parse
 import re
-from typing import List, Any
+from typing import List
 
 from bs4 import BeautifulSoup
 from crawler.store.models import Product, Store
@@ -151,19 +150,6 @@ class KonzumCrawler(BaseCrawler):
             raise ValueError(f"No price list found for {date}")
         return csv_urls_by_date[date]
 
-    def fix_csv_row(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Fix price and barcode fields in the CSV row data."""
-        if data["price"] is None:
-            if data["special_price"] is None:
-                raise ValueError("Price and special price are both missing")
-            else:
-                data["price"] = data["special_price"]
-
-        if data["barcode"] == "":
-            data["barcode"] = f"{self.CHAIN}:{data['product_id']}"
-
-        return data
-
     def get_store_prices(self, csv_url: str) -> List[Product]:
         try:
             content = self.fetch_text(csv_url)
@@ -189,41 +175,24 @@ class KonzumCrawler(BaseCrawler):
             ValueError: If no price list is found for the given date.
         """
 
-        logger.info(f"Starting {self.CHAIN.capitalize()} crawl for date: {date}")
-        t0 = time()
+        csv_links = self.get_index(date)
+        stores = []
 
-        try:
-            csv_links = self.get_index(date)
+        for url in csv_links:
+            store = self.parse_store_info(url)
+            products = self.get_store_prices(url)
+            if not products:
+                logger.warning(f"Error getting prices from {url}, skipping")
+                continue
+            store.items = products
+            stores.append(store)
 
-            stores = []
-
-            # Process each CSV link
-            for url in csv_links:
-                store = self.parse_store_info(url)
-                products = self.get_store_prices(url)
-                if not products:
-                    logger.warning(f"Error getting prices from {url}, skipping")
-                    continue
-                store.items = products
-                stores.append(store)
-
-            total_products = sum(len(store.items) for store in stores)
-            t1 = time()
-            dt = int(t1 - t0)
-            logger.info(
-                f"Completed {self.CHAIN.title()} crawl for {date} in {dt}s, "
-                f"found {len(stores)} stores with {total_products} total products"
-            )
-            return stores
-
-        except Exception as e:
-            logger.error(f"Failed to fetch or parse Konzum price list: {str(e)}")
-            raise
+        return stores
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     crawler = KonzumCrawler()
-    stores = crawler.get_all_products(datetime.date.today())
+    stores = crawler.crawl(datetime.date.today())
     print(stores[0])
     print(stores[0].items[0])
