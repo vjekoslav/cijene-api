@@ -199,8 +199,11 @@ class BaseCrawler:
         if data["barcode"] == "":
             data["barcode"] = f"{self.CHAIN}:{data['product_id']}"
 
+        if "special_price" not in data:
+            data["special_price"] = None
+
         if data["price"] is None:
-            if data["special_price"] is None:
+            if data.get("special_price") is None:
                 raise ValueError("Price and special price are both missing")
             else:
                 data["price"] = data["special_price"]
