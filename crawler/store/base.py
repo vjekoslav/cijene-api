@@ -6,6 +6,8 @@ from typing import Any, BinaryIO, Generator
 from time import time
 from zipfile import ZipFile
 import datetime
+from bs4 import BeautifulSoup
+from re import Pattern
 
 import httpx
 
@@ -24,6 +26,8 @@ class BaseCrawler:
 
     TIMEOUT = 30.0
     USER_AGENT = None
+
+    ZIP_DATE_PATTERN: Pattern | None = None
 
     PRICE_MAP: dict[str, tuple[str, bool]]
     """Mapping from CSV column names to price fields and whether they are required."""
@@ -93,7 +97,7 @@ class BaseCrawler:
         t0 = time()
         with self.client.stream("GET", url) as response:
             response.raise_for_status()
-            total_mb = int(response.headers.get("content-length", 0)) / MB
+            total_mb = int(response.headers.get("content-length", 0)) // MB
             logger.debug(f"File size: {total_mb} MB")
 
             for chunk in response.iter_bytes(chunk_size=1 * MB):
@@ -201,8 +205,11 @@ class BaseCrawler:
             else:
                 data["price"] = data["special_price"]
 
-        if data["anchor_price"] is not None and not data["anchor_price_date"]:
+        if data["anchor_price"] is not None and not data.get("anchor_price_date"):
             data["anchor_price_date"] = datetime.date(2025, 5, 2).isoformat()
+
+        if data["unit_price"] is None:
+            data["unit_price"] = data["price"]
 
         return data
 
@@ -284,6 +291,40 @@ class BaseCrawler:
 
         logger.debug(f"Parsed {len(products)} products from CSV")
         return products
+
+    def parse_index_for_zip(self, html_content: str) -> dict[datetime.date, str]:
+        """
+        Parse HTML and return ZIP links.
+
+        Args:
+            html_content: HTML content of the price list index page
+
+        Returns:
+            Dictionary mapping dates to ZIP file URLs
+        """
+
+        if not self.ZIP_DATE_PATTERN:
+            raise NotImplementedError(
+                f"{self.__class__.__name__}.ZIP_DATE_PATTERN is not defined"
+            )
+
+        soup = BeautifulSoup(html_content, "html.parser")
+        zip_urls_by_date = {}
+
+        links = soup.select('a[href$=".zip"]')
+        for link in links:
+            url = str(link["href"])
+
+            m = self.ZIP_DATE_PATTERN.match(url)
+            if not m:
+                continue
+
+            # Extract date from the URL
+            day, month, year = m.groups()
+            url_date = datetime.date(int(year), int(month), int(day))
+            zip_urls_by_date[url_date] = url
+
+        return zip_urls_by_date
 
     def get_all_products(self, date: datetime.date) -> list[Store]:
         raise NotImplementedError()
