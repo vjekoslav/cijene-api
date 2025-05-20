@@ -42,7 +42,7 @@ class KonzumCrawler(BaseCrawler):
 
     ADDRESS_PATTERN = re.compile(r"(.*) (\d{5}) (.*)")
 
-    def parse_index(self, content: str) -> dict[datetime.date, list[str]]:
+    def parse_index(self, content: str) -> list[str]:
         """
         Parse the Konzum index page to extract the price date and CSV links.
 
@@ -50,38 +50,20 @@ class KonzumCrawler(BaseCrawler):
             content: HTML content of the index page
 
         Returns:
-            Dictionary with date as key and list of CSV links as value
+            List of CSV urls on the page
         """
 
-        csv_urls_by_date = {}
-
         soup = BeautifulSoup(content, "html.parser")
-        date_divs = soup.select("div[data-tab-type]")
 
-        for div in date_divs:
-            date_attrib = div.get("data-tab-type")
-            if not date_attrib:
-                continue
-            try:
-                date_value = datetime.datetime.strptime(
-                    str(date_attrib), "%Y%m%d"
-                ).date()
-            except ValueError:
-                continue
+        urls = []
+        csv_links = soup.select("a[format='csv']")
 
-            urls = []
-            csv_links = div.select("a[format='csv']")
+        for link in csv_links:
+            href = link.get("href")
+            if href:
+                urls.append(f"{self.BASE_URL}{href}")
 
-            for link in csv_links:
-                href = link.get("href")
-                if href:
-                    urls.append(f"{self.BASE_URL}{href}")
-
-            if urls:
-                urls = list(set(urls))
-                csv_urls_by_date[date_value] = urls
-
-        return csv_urls_by_date
+        return list(set(urls))
 
     def parse_store_info(self, url: str) -> Store:
         """
@@ -143,15 +125,22 @@ class KonzumCrawler(BaseCrawler):
         return store
 
     def get_index(self, date: datetime.date) -> list[str]:
-        content = self.fetch_text(self.INDEX_URL)
-        csv_urls_by_date = self.parse_index(content)
-        others = ", ".join(
-            f"{d:%Y-%m-%d} ({len(c)})" for d, c in csv_urls_by_date.items()
-        )
-        logger.debug(f"Available price lists: {others}")
-        if date not in csv_urls_by_date:
-            raise ValueError(f"No price list found for {date}")
-        return csv_urls_by_date[date]
+        url = f"{self.INDEX_URL}?date={date:%Y-%m-%d}"
+
+        csv_urls = []
+        for page in range(1, 10):
+            page_url = f"{url}&page={page}"
+            content = self.fetch_text(page_url)
+            if not content:
+                break
+
+            csv_urls_on_page = self.parse_index(content)
+            if not csv_urls_on_page:
+                break
+
+            csv_urls.extend(csv_urls_on_page)
+
+        return csv_urls
 
     def get_store_prices(self, csv_url: str) -> List[Product]:
         try:
