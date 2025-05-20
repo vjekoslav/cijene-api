@@ -1,0 +1,19 @@
+fail_fast: true
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty check
+        stages: [pre-commit]
+        types: [python]
+        entry: uv run ty check
+        language: python
+        pass_filenames: false
