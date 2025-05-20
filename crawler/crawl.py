@@ -12,6 +12,7 @@ from crawler.store.plodine import PlodineCrawler
 from crawler.store.spar import SparCrawler
 from crawler.store.studenac import StudenacCrawler
 from crawler.store.tommy import TommyCrawler
+from crawler.store.kaufland import KauflandCrawler
 
 from crawler.store.output import save_chain, copy_archive_info, create_archive
 
@@ -24,6 +25,7 @@ CRAWLERS = {
     PlodineCrawler.CHAIN: PlodineCrawler,
     LidlCrawler.CHAIN: LidlCrawler,
     TommyCrawler.CHAIN: TommyCrawler,
+    KauflandCrawler.CHAIN: KauflandCrawler,
 }
 
 

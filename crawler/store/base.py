@@ -8,6 +8,7 @@ from zipfile import ZipFile
 import datetime
 from bs4 import BeautifulSoup
 from re import Pattern
+import unicodedata
 
 import httpx
 
@@ -59,7 +60,7 @@ class BaseCrawler:
             for encoding in encodings:  # type: ignore
                 try:
                     text = content.decode(encoding)
-                    if prefix and text.startswith(prefix):
+                    if not prefix or text.startswith(prefix):
                         return text
                 except UnicodeDecodeError:
                     continue
@@ -184,6 +185,23 @@ class BaseCrawler:
                 raise ValueError(f"Invalid price format: {price_str}")
             else:
                 return None
+
+    @staticmethod
+    def strip_diacritics(text: str) -> str:
+        """
+        Remove diacritics from a string.
+
+        Args:
+            text: The input string
+
+        Returns:
+            The string with diacritics removed
+        """
+        return "".join(
+            c
+            for c in unicodedata.normalize("NFD", text)
+            if unicodedata.category(c) != "Mn"
+        )
 
     def fix_product_data(self, data: dict[str, Any]) -> dict[str, Any]:
         """
