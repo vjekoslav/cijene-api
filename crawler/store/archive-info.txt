@@ -1,0 +1,70 @@
+ZIP arhiva sadrži CSV datoteke s podacima o cijenama za taj dan.
+
+## Struktura arhive
+
+Struktura mapa unutar ZIP arhive, za svaki trgovački lanac:
+
+```
+<lanac>/
+<lanac>/stores.csv
+<lanac>/products.csv
+<lanac>/prices.csv
+```
+
+Objašnjenje:
+
+* `stores.csv` - popis poslovnica trgovačkog lanca
+* `products.csv` - popis jedinstvenih proizvoda koje prodaje trgovački lanac
+* `prices.csv` - popis cijena proizvoda po poslovnici (referencira ID proizvoda i poslovnice)
+
+Arhiva sadrži podatke za sljedeće trgovačke lance: Konzum, Spar, Studenac, Plodine, Lidl, Tommy.
+
+## Formati CSV datoteka
+
+Sve datoteke su u UTF-8 formatu, bez BOM-a, te koriste zarez (,) kao separator.
+Prva linija svake datoteke sadrži nazive stupaca.
+
+### Poslovnice: `stores.csv`
+
+Stupci:
+
+* store_id - šifra poslovnice (za pojedini trgovački lanac)
+* type - tip poslovnice (npr. supermarket, hipermarket)
+* address - adresa poslovnice
+* city - grad u kojem se nalazi poslovnica
+* zipcode - poštanski broj poslovnice
+
+### Proizvodi: `products.csv`
+
+Stupci:
+
+* product_id - šifra proizvoda (za pojedini trgovački lanac)
+* barcode - EAN kod proizvoda ako postoji, ili šifra u obliku <lanac>:<product_id>
+* name - naziv proizvoda
+* brand - marka proizvoda
+* category - kategorija proizvoda
+* unit - jedinica mjere
+* quantity - količina (broj komada, masa, volumen)
+
+Napomena: EAN kodovi nisu uvijek dostupni, pa se u tom slučaju koristi šifra u obliku
+`<lanac>:<product_id>`. Šifra proizvoda (`product_id`) je jedinstvena unutar trgovačkog
+lanca, ali ne i među različitim trgovinama.
+
+### Cijene: `prices.csv`
+
+Stupci:
+
+* store_id - šifra poslovnice (za pojedini trgovački lanac)
+* product_id - šifra proizvoda (za pojedini trgovački lanac)
+* price - cijena proizvoda
+* unit_price - cijena po jedinici mjere (ako je dostupno, inače prazno)
+* best_price_30 - najbolja cijena u zadnjih 30 dana (ako je dostupno, inače prazno)
+* anchor_price - cijena na 2.5.2025. (ako je dostupn, inače prazno)
+
+## Izvor i obrada podataka
+
+Podaci su prikupljeni putem web scrapinga s web stranica trgovačkih lanaca,
+temeljem Odluke o objavi cjenika i isticanju dodatne cijene kao mjeri izravne
+kontrole cijena u trgovini na malo, NN 75/2025 od 2.5.2025.
+
+Obrada podataka: https://cijene.dev
