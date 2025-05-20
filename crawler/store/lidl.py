@@ -29,7 +29,7 @@ class LidlCrawler(BaseCrawler):
 
     ANCHOR_PRICE_COLUMN = "Sidrena_cijena_na_02.05.2025"
     PRICE_MAP = {
-        "price": ("MALOPRODAJNA_CIJENA", True),
+        "price": ("MALOPRODAJNA_CIJENA", False),
         "unit_price": ("CIJENA_ZA_JEDINICU_MJERE", False),
         "anchor_price": (ANCHOR_PRICE_COLUMN, False),
     }

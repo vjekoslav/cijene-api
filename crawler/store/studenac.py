@@ -1,7 +1,7 @@
 import datetime
 import logging
 import re
-from typing import Any, Optional, Tuple
+from typing import Optional, Tuple
 
 from lxml import etree  # type: ignore
 
@@ -73,15 +73,6 @@ class StudenacCrawler(BaseCrawler):
         except Exception as e:
             logger.warning(f"Error parsing address {address}: {e}", exc_info=True)
             return address.strip().title(), ""
-
-    def fix_product_data(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Fix price and barcode fields in the Product data."""
-        data = super().fix_product_data(data)
-
-        if data["unit_price"] is None:
-            data["unit_price"] = data["price"]
-
-        return data
 
     def parse_xml(self, xml_content: bytes) -> Optional[Store]:
         """
