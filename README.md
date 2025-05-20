@@ -6,6 +6,15 @@ Preuzimanje podataka o cijenama proizvoda u trgovačkim lancima u Republici Hrva
 temeljeno je na Odluci o objavi cjenika i isticanju dodatne cijene kao mjeri izravne
 kontrole cijena u trgovini na malo, NN 75/2025 od 2.5.2025.
 
+Trenutno podržani trgovački lanci:
+
+* Konzum
+* Lidl
+* Plodine
+* Spar
+* Tommy
+* Studenac
+
 ## Softverska implementacija
 
 Softver je izgrađen na Pythonu a sastoji se od dva dijela:
