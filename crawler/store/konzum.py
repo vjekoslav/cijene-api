@@ -114,6 +114,9 @@ class KonzumCrawler(BaseCrawler):
         store_type = (parts[0]).lower()
         store_id = parts[2]
 
+        # TODO: also add support for:
+        # SUPERMARKET,CARLOTTA GRISI 5, SVETI ANTON 52466 NOVIGRAD,3274,1332,19.05.2025, 05-52.CSV
+        # SUPERMARKET,PUŠKARIĆEVA 15,LUČKO 10250 ZAGREB,1271,1271,19.05.2025, 05-53.CSV
         m = self.ADDRESS_PATTERN.match(parts[1])
         if not m:
             raise ValueError(f"Could not parse address from: {parts[1]}")
@@ -179,8 +182,13 @@ class KonzumCrawler(BaseCrawler):
         stores = []
 
         for url in csv_links:
-            store = self.parse_store_info(url)
-            products = self.get_store_prices(url)
+            try:
+                store = self.parse_store_info(url)
+                products = self.get_store_prices(url)
+            except Exception as e:
+                logger.error(f"Error processing store from {url}: {e}", exc_info=True)
+                continue
+
             if not products:
                 logger.warning(f"Error getting prices from {url}, skipping")
                 continue
