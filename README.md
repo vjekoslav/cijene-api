@@ -21,7 +21,7 @@ korištenje `uv` za setup projekta:
 ```bash
 git clone https://github.com/senko/cijene-api.git
 cd cijene-api
-uv sync
+uv sync --dev
 ```
 
 ## Korištenje
