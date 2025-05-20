@@ -58,8 +58,12 @@ def main():
     if args.output_path is None:
         parser.error("output_path is required; use -h/--help for more info")
 
-    if not args.output_path.is_dir():
-        parser.error(f"Output path '{args.output_path}' is not a directory")
+    if args.output_path.is_file():
+        parser.error(f"Output path '{args.output_path}' is a file.")
+
+    if not args.output_path.exists():
+        args.output_path.mkdir(parents=True, exist_ok=True)
+        print(f"Created directory: {args.output_path}")
 
     chains_to_crawl = None
     if args.chain:
