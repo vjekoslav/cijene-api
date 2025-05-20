@@ -1,21 +1,21 @@
 import csv
 import datetime
 import io
+from json import loads
 import logging
 import re
 from decimal import Decimal
-from time import time
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
-import httpx
 
+from crawler.store.base import BaseCrawler
 from crawler.store.models import Product, Store
-from crawler.store.utils import parse_price, to_camel_case, log_operation_timing
+from crawler.store.utils import parse_price, to_camel_case
 
 logger = logging.getLogger(__name__)
 
 
-class TommyCrawler:
+class TommyCrawler(BaseCrawler):
     """
     Crawler for Tommy store prices.
 
@@ -24,13 +24,10 @@ class TommyCrawler:
     the corresponding CSV files for product information.
     """
 
-    BASE_URL = "https://spiza.tommy.hr/api/v2"  # Note: Already includes api/v2
+    CHAIN = "tommy"
+    BASE_URL = "https://spiza.tommy.hr/api/v2"
 
-    def __init__(self) -> None:
-        """Initialize the Tommy crawler."""
-        self.client = httpx.Client(timeout=30.0)
-
-    def fetch_stores_list(self, date: datetime.date) -> List[Dict]:
+    def fetch_stores_list(self, date: datetime.date) -> dict[str, str]:
         """
         Fetch the list of store price tables for a specific date.
 
@@ -44,93 +41,29 @@ class TommyCrawler:
             httpx.RequestError: If the API request fails
             ValueError: If the response cannot be parsed
         """
-        formatted_date = date.strftime("%Y-%m-%d")
-        url = f"{self.BASE_URL}/shop/store-prices-tables?date={formatted_date}&page=1&itemsPerPage=200&channelCode=general"
+        url = (
+            f"{self.BASE_URL}/shop/store-prices-tables"
+            f"?date={date:%Y-%m-%d}&page=1&itemsPerPage=200&channelCode=general"
+        )
+        content = self.fetch_text(url)
+        data = loads(content)
+        store_list = data.get("hydra:member", [])
 
-        logger.info(f"Fetching Tommy store list for date {formatted_date}")
+        stores = {}
+        for store in store_list:
+            csv_id = store.get("@id")
+            filename = store.get("fileName", "Unknown")
+            if not csv_id or not filename:
+                logger.warning(
+                    f"Skipping store with missing CSV ID or filename: {store}"
+                )
+                continue
+            if csv_id.startswith("/api/v2"):
+                csv_id = csv_id[len("/api/v2") :]
 
-        try:
-            response = self.client.get(url)
-            response.raise_for_status()
+            stores[filename] = self.BASE_URL + csv_id
 
-            data = response.json()
-            store_list = data.get("hydra:member", [])
-            logger.info(f"Found {len(store_list)} Tommy stores in the API response")
-
-            if not store_list:
-                logger.warning(f"No Tommy stores found for date {formatted_date}")
-
-            return store_list
-
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                f"HTTP error fetching Tommy store list: {e.response.status_code} - {e}"
-            )
-            raise ValueError(
-                f"Failed to fetch Tommy store list: HTTP {e.response.status_code}"
-            )
-
-        except httpx.RequestError as e:
-            logger.error(f"Request error fetching Tommy store list: {e}")
-            raise ValueError("Failed to fetch Tommy store list: Connection error")
-
-        except ValueError as e:
-            logger.error(f"JSON parsing error in Tommy store list response: {e}")
-            raise ValueError(f"Failed to parse Tommy store list response: {e}")
-
-    def download_csv(self, csv_id: str) -> str:
-        """
-        Download the CSV file for a specific store.
-
-        Args:
-            store_id: The ID of the store from the API (@id value)
-
-        Returns:
-            Content of the CSV file
-
-        Raises:
-            ValueError: If the download fails or yields empty content
-        """
-        try:
-            # The @id from API looks like: "/api/v2/shop/store-prices-tables/SUPERMARKET,..."
-            # But our BASE_URL already contains "https://spiza.tommy.hr/api/v2"
-            # So we need to be careful to avoid duplication
-
-            logger.debug(f"Original store_id: {csv_id}")
-
-            # Extract everything after "/api/v2" if it exists
-            if "/api/v2/" not in csv_id:
-                raise ValueError(f"Unexpected store id: {csv_id}")
-
-            path = csv_id.split("/api/v2/", 1)[1]
-            download_url = f"{self.BASE_URL}/{path}"
-
-            logger.info(f"Downloading Tommy CSV from {download_url}")
-            response = self.client.get(
-                download_url, timeout=60.0
-            )  # Longer timeout for CSV download
-            response.raise_for_status()
-
-            content = response.text
-            content_size = len(content)
-
-            if content_size == 0:
-                raise ValueError("Downloaded CSV is empty")
-
-            logger.debug(f"CSV downloaded successfully, size: {content_size} bytes")
-            return content
-
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP error downloading CSV: {e.response.status_code} - {e}")
-            raise ValueError(f"Failed to download CSV: HTTP {e.response.status_code}")
-
-        except httpx.RequestError as e:
-            logger.error(f"Request error downloading CSV: {e}")
-            raise ValueError("Failed to download CSV: Connection error")
-
-        except Exception as e:
-            logger.error(f"Unexpected error downloading CSV: {e}")
-            raise ValueError(f"Failed to download CSV: {str(e)}")
+        return stores
 
     def parse_date_string(self, date_str: str) -> Optional[datetime.date]:
         """
@@ -185,7 +118,7 @@ class TommyCrawler:
         try:
             # Read CSV content using StringIO and DictReader
             csv_file = io.StringIO(csv_content)
-            reader = csv.DictReader(csv_file)
+            reader = csv.DictReader(csv_file)  # type: ignore
 
             if not reader.fieldnames:
                 logger.warning("CSV file has no header row")
@@ -195,20 +128,20 @@ class TommyCrawler:
 
             # Define expected field names
             field_map = {
-                'barcode': 'BARKOD_ARTIKLA',
-                'product_id': 'SIFRA_ARTIKLA',
-                'product_name': 'NAZIV_ARTIKLA',
-                'brand': 'BRAND',
-                'category': 'ROBNA_STRUKTURA',
-                'unit': 'JEDINICA_MJERE',
-                'quantity': 'NETO_KOLICINA',
-                'price': 'MPC',
-                'special_price': 'MPC_POSEBNA_PRODAJA',
-                'unit_price': 'CIJENA_PO_JM',
-                'lowest_price_30days': 'MPC_NAJNIZA_30',
-                'anchor_price': 'MPC_020525',
-                'date_added': 'DATUM_ULASKA_NOVOG_ARTIKLA',
-                'initial_price': 'PRVA_CIJENA_NOVOG_ARTIKLA'
+                "barcode": "BARKOD_ARTIKLA",
+                "product_id": "SIFRA_ARTIKLA",
+                "product_name": "NAZIV_ARTIKLA",
+                "brand": "BRAND",
+                "category": "ROBNA_STRUKTURA",
+                "unit": "JEDINICA_MJERE",
+                "quantity": "NETO_KOLICINA",
+                "price": "MPC",
+                "special_price": "MPC_POSEBNA_PRODAJA",
+                "unit_price": "CIJENA_PO_JM",
+                "lowest_price_30days": "MPC_NAJNIZA_30",
+                "anchor_price": "MPC_020525",
+                "date_added": "DATUM_ULASKA_NOVOG_ARTIKLA",
+                "initial_price": "PRVA_CIJENA_NOVOG_ARTIKLA",
             }
 
             row_count = 0
@@ -217,23 +150,23 @@ class TommyCrawler:
 
                 try:
                     # Extract mandatory fields from the row
-                    barcode = row.get(field_map['barcode'], '').strip()
-                    product_id = row.get(field_map['product_id'], '').strip()
-                    product_name = row.get(field_map['product_name'], '').strip()
-                    brand = row.get(field_map['brand'], '').strip()
-                    category = row.get(field_map['category'], '').strip()
-                    unit = row.get(field_map['unit'], '').strip()
-                    quantity = row.get(field_map['quantity'], '').strip()
+                    barcode = row.get(field_map["barcode"], "").strip()
+                    product_id = row.get(field_map["product_id"], "").strip()
+                    product_name = row.get(field_map["product_name"], "").strip()
+                    brand = row.get(field_map["brand"], "").strip()
+                    category = row.get(field_map["category"], "").strip()
+                    unit = row.get(field_map["unit"], "").strip()
+                    quantity = row.get(field_map["quantity"], "").strip()
 
                     # Parse price fields with proper error handling
                     try:
-                        price = parse_price(row.get(field_map['price'], '0'))
+                        price = parse_price(row.get(field_map["price"], "0"))
                     except Exception as e:
                         logger.warning(f"Failed to parse price in row {row_count}: {e}")
                         price = Decimal("0.00")
 
                     try:
-                        unit_price = parse_price(row.get(field_map['unit_price'], '0'))
+                        unit_price = parse_price(row.get(field_map["unit_price"], "0"))
                     except Exception as e:
                         logger.warning(
                             f"Failed to parse unit_price in row {row_count}: {e}"
@@ -247,32 +180,34 @@ class TommyCrawler:
                     initial_price = None
                     date_added = None
 
-                    special_price_str = row.get(field_map['special_price'], '')
+                    special_price_str = row.get(field_map["special_price"], "")
                     if special_price_str.strip():
                         try:
                             special_price = parse_price(special_price_str)
                         except Exception:
                             pass
 
-                    lowest_price_30days_str = row.get(field_map['lowest_price_30days'], '')
+                    lowest_price_30days_str = row.get(
+                        field_map["lowest_price_30days"], ""
+                    )
                     if lowest_price_30days_str.strip():
                         try:
                             lowest_price_30days = parse_price(lowest_price_30days_str)
                         except Exception:
                             pass
 
-                    anchor_price_str = row.get(field_map['anchor_price'], '')
+                    anchor_price_str = row.get(field_map["anchor_price"], "")
                     if anchor_price_str.strip():
                         try:
                             anchor_price = parse_price(anchor_price_str)
                         except Exception:
                             pass
 
-                    date_added_str = row.get(field_map['date_added'], '')
+                    date_added_str = row.get(field_map["date_added"], "")
                     if date_added_str.strip():
                         date_added = self.parse_date_string(date_added_str)
 
-                    initial_price_str = row.get(field_map['initial_price'], '')
+                    initial_price_str = row.get(field_map["initial_price"], "")
                     if initial_price_str.strip():
                         try:
                             initial_price = parse_price(initial_price_str)
@@ -298,7 +233,7 @@ class TommyCrawler:
                             price=price,
                             special_price=special_price,
                             unit_price=unit_price,
-                            best_price_30=lowest_price_30days, # Map lowest_price_30days to best_price_30
+                            best_price_30=lowest_price_30days,  # Map lowest_price_30days to best_price_30
                             anchor_price=anchor_price,
                             date_added=date_added,
                             initial_price=initial_price,
@@ -325,7 +260,9 @@ class TommyCrawler:
             logger.error(f"Error parsing CSV: {e}")
             return []
 
-    def parse_store_from_filename(self, filename: str) -> Tuple[str, str, str, str, str]:
+    def parse_store_from_filename(
+        self, filename: str
+    ) -> Tuple[str, str, str, str, str]:
         """
         Parse store information from the filename.
 
@@ -378,17 +315,13 @@ class TommyCrawler:
                 f"Parsed store info: type={store_type}, address={address}, zipcode={zipcode}, city={city}"
             )
 
-
-
             return (store_type, store_id, address, zipcode, city)
 
         except Exception as e:
             logger.error(f"Error parsing store from filename {filename}: {e}")
             raise
 
-    def get_all_products(
-        self, date: datetime.date
-    ) -> Tuple[datetime.date, List[Store]]:
+    def get_all_products(self, date: datetime.date) -> list[Store]:
         """
         Main method to fetch and parse all products from Tommy's price lists.
 
@@ -402,101 +335,43 @@ class TommyCrawler:
         Raises:
             ValueError: If the price list cannot be fetched or parsed
         """
-        logger.info(f"Starting Tommy product crawl for date {date}")
-        t0 = time()
 
-        try:
-            # Fetch store list
-            stores_list = self.fetch_stores_list(date)
+        store_map = self.fetch_stores_list(date)
+        if not store_map:
+            logger.warning(f"No stores found for date {date}")
+            return []
 
-            if not stores_list:
-                logger.warning(f"No stores found for date {date}")
-                return date, []
-
-            result_stores: List[Store] = []
-            total_products = 0
-            processed_count = 0
-            error_count = 0
-
-            # Process each store
-            for store_info in stores_list:
-                processed_count += 1
-                csv_id = store_info.get("@id")
-                filename = store_info.get("fileName", "Unknown")
-
-                if not csv_id:
-                    logger.warning(f"Skipping store with missing CSV ID: {store_info}")
-                    error_count += 1
-                    continue
-
-                try:
-                    logger.info(
-                        f"Processing store {processed_count}/{len(stores_list)}: {filename}"
-                    )
-
-                    # Extract store information
-                    store_type, store_id, address, zipcode, city = self.parse_store_from_filename(
-                        filename
-                    )
-
-                    # Create store
-                    store = Store(
-                        chain="tommy",
-                        name=f"Tommy {store_type.title()} {address}",
-                        store_type=store_type,
-                        store_id=store_id,
-                        city=city,
-                        street_address=address,
-                        zipcode=zipcode,
-                        items=[],
-                    )
-
-                    # Download and parse CSV
-                    csv_content = self.download_csv(csv_id)
-                    products = self.parse_csv(csv_content)
-
-                    # Skip stores with no products
-                    if not products:
-                        logger.warning(f"Skipping store with no products: {store.name}")
-                        error_count += 1
-                        continue
-
-                    # Add products to store
-                    store.items = products
-                    result_stores.append(store)
-                    total_products += len(products)
-
-                    logger.info(
-                        f"Successfully processed store: {store.name}, found {len(products)} products"
-                    )
-
-                except Exception as e:
-                    logger.error(f"Error processing store {filename}: {e}")
-                    error_count += 1
-
-            t1 = time()
-            log_operation_timing(
-                "crawl", "Tommy", date, t0, t1, len(result_stores), total_products
+        stores = []
+        for filename, url in store_map.items():
+            # Extract store information
+            store_type, store_id, address, zipcode, city = (
+                self.parse_store_from_filename(filename)
             )
 
-            # Log summary
-            logger.info(
-                f"Tommy crawl summary: processed {processed_count} stores, {error_count} errors, {len(result_stores)} successful"
+            store = Store(
+                chain="tommy",
+                name=f"Tommy {store_type.title()} {address}",
+                store_type=store_type,
+                store_id=store_id,
+                city=city,
+                street_address=address,
+                zipcode=zipcode,
+                items=[],
             )
 
-            return date, result_stores
+            csv_content = self.fetch_text(url)
+            products = self.parse_csv(csv_content)
 
-        except Exception as e:
-            t1 = time()
-            dt = int(t1 - t0)
-            logger.error(
-                f"Failed to crawl Tommy products for {date}: {e} (after {dt}s)"
-            )
-            raise ValueError(f"Failed to crawl Tommy products: {str(e)}")
+            store.items = products
+            stores.append(store)
+
+        return stores
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     crawler = TommyCrawler()
-    current_date = datetime.date.today()
-    price_date, stores = crawler.get_all_products(current_date)
+    current_date = datetime.date.today() - datetime.timedelta(days=1)
+    stores = crawler.get_all_products(current_date)
+    print(stores[0])
+    print(stores[0].items[0])

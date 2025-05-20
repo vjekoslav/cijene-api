@@ -2,59 +2,79 @@ import datetime
 import logging
 import re
 from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
-from typing import Optional
+from typing import Optional, overload
 
 logger = logging.getLogger(__name__)
 
 
 def to_camel_case(text: str) -> str:
     """
-    Converts text to camel case.
+    Converts text to camel case and replace any '_' with ' '.
 
     Args:
-        text: Input text, typically in lowercase with underscores
+        text: Input text
 
     Returns:
         Text converted to camel case
     """
-    if not text:
+    if text:
+        return text.replace("_", " ").title()
+    else:
         return ""
 
-    # Replace underscores with spaces
-    text = text.replace("_", " ")
-    # Split by spaces and capitalize each word
-    words = [word.capitalize() for word in text.split()]
-    # Join with spaces
-    return " ".join(words)
+
+@overload
+def parse_price(price_str: str, required: bool = True) -> Decimal: ...
 
 
-def parse_price(price_str: str) -> Decimal:
+@overload
+def parse_price(price_str: str, required: bool = False) -> Decimal | None: ...
+
+
+def parse_price(price_str: str | None, required: bool = False) -> Decimal | None:
     """
-    Parse a price string that may use either , or . as decimal separator.
+    Parse a price string.
+
+    The string may use either , or . as decimal separator, may omit leading
+    zero, and may contain currency symbols "€" or "EUR".
+
+    None is handled the same as empty string - no price information available.
 
     Args:
-        price_str: String representing a price, possibly with "," as decimal separator
+        price_str: String representing the price, or None (no price)
+        required: If True, raises ValueError if the price is not valid
+                  If False, returns None for invalid prices
 
     Returns:
         Parsed price as a Decimal with 2 decimal places
-    """
-    if not price_str or price_str.strip() == "":
-        return Decimal("0.00")
 
-    # Replace comma with dot for decimal point
-    normalized = price_str.replace(",", ".")
+    Raises:
+        ValueError: If required is True and the price is not valid
+    """
+    if price_str is None:
+        price_str = ""
+
+    price_str = price_str.replace("€", "").replace("EUR", "").replace(",", ".").strip()
+
+    if not price_str:
+        if required:
+            raise ValueError("Price is required")
+        else:
+            return None
 
     # Handle missing leading zero
-    if normalized.startswith("."):
-        normalized = "0" + normalized
+    if price_str.startswith("."):
+        price_str = "0" + price_str
 
     try:
         # Convert to Decimal and round to 2 decimal places
-        price = Decimal(normalized).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        return price
-    except (ValueError, InvalidOperation):
+        return Decimal(price_str).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    except (ValueError, TypeError, InvalidOperation):
         logger.warning(f"Failed to parse price: {price_str}")
-        return Decimal("0.00")
+        if required:
+            raise ValueError(f"Invalid price format: {price_str}")
+        else:
+            return None
 
 
 def log_operation_timing(
