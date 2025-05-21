@@ -16,7 +16,7 @@ from crawler.store.kaufland import KauflandCrawler
 from crawler.store.eurospin import EurospinCrawler
 from crawler.store.dm import DmCrawler
 from crawler.store.ktc import KtcCrawler
-
+from crawler.store.metro import MetroCrawler
 
 from crawler.store.output import save_chain, copy_archive_info, create_archive
 
@@ -33,6 +33,7 @@ CRAWLERS = {
     EurospinCrawler.CHAIN: EurospinCrawler,
     DmCrawler.CHAIN: DmCrawler,
     KtcCrawler.CHAIN: KtcCrawler,
+    MetroCrawler.CHAIN: MetroCrawler,
 }
 
 

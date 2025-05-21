@@ -18,6 +18,7 @@ Trenutno podržani trgovački lanci:
 * Eurospin
 * dm
 * KTC
+* Metro
 
 ## Softverska implementacija
 
