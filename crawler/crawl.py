@@ -98,6 +98,7 @@ def crawl(
 
     t0 = time()
     for chain in chains:
+        logger.info(f"Starting crawl for {chain} on {date:%Y-%m-%d}")
         crawl_chain(chain, date, path / chain)
     t1 = time()
 

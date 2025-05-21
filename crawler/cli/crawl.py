@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 from datetime import datetime
+import logging
 import sys
 from pathlib import Path
 
@@ -15,6 +16,33 @@ def parse_date(date_str):
         return datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
         raise argparse.ArgumentTypeError("Date must be in YYYY-MM-DD format")
+
+
+def setup_logging(log_level):
+    """Configure logging for the crawler package."""
+    level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+        "critical": logging.CRITICAL,
+    }
+
+    level = level_map.get(log_level.lower(), logging.WARNING)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s:%(name)s:%(levelname)s:%(message)s",
+        stream=sys.stderr,
+    )
+
+    # Only enable logs from the crawler package
+    for handler in logging.root.handlers:
+        handler.addFilter(lambda record: record.name.startswith("crawler"))
+
+    # Set other loggers to a higher level to suppress their messages
+    for logger_name in logging.root.manager.loggerDict:
+        if not logger_name.startswith("crawler"):
+            logging.getLogger(logger_name).setLevel(logging.ERROR)
 
 
 def main():
@@ -46,8 +74,18 @@ def main():
         action="store_true",
         help="List supported retail chains and exit (output_path is not required)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        choices=["debug", "info", "warning", "error", "critical"],
+        default="warning",
+        help="Set verbosity level (default: warning)",
+    )
 
     args = parser.parse_args()
+
+    # Set up logging
+    setup_logging(args.verbose)
 
     if args.list:
         print("Supported retail chains:")
@@ -90,8 +128,7 @@ def main():
         print(f"Archive created: {zip_path}")
         return 0
     except Exception as e:
-        # Consider logging the full exception for debugging if a logger is set up
-        print(f"Error during crawling: {e}", file=sys.stderr)
+        print(f"Error during crawling: {e}")
         return 1
 
 

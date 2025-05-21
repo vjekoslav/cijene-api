@@ -137,7 +137,6 @@ class KauflandCrawler(BaseCrawler):
             url = item.get("path")
             if not label or not url:
                 continue
-            print("CHECKING", date_str, label)
             if date_str not in label and date_str2 not in label:
                 continue
             urls[label] = f"{self.BASE_URL}{url}"

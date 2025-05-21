@@ -306,7 +306,7 @@ class BaseCrawler:
             try:
                 product = self.parse_csv_row(row)
             except Exception as e:
-                logger.warning(f"Failed to parse row: {row}: {e}", exc_info=True)
+                logger.warning(f"Failed to parse row: {row}: {e}")
                 continue
             products.append(product)
 
