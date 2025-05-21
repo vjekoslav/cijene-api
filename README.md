@@ -14,6 +14,7 @@ Trenutno podržani trgovački lanci:
 * Spar
 * Tommy
 * Studenac
+* Kaufland
 
 ## Softverska implementacija
 
