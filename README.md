@@ -17,6 +17,7 @@ Trenutno podržani trgovački lanci:
 * Kaufland
 * Eurospin
 * dm
+* KTC
 
 ## Softverska implementacija
 

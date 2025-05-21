@@ -162,6 +162,14 @@ class BaseCrawler:
         if price_str is None:
             price_str = ""
 
+        # If price contains both "," and ".", assume what occurs first is the 1000s
+        # separator and replace it with an empty string
+        if "," in price_str and "." in price_str:
+            if price_str.index(",") < price_str.index("."):
+                price_str = price_str.replace(",", "")
+            else:
+                price_str = price_str.replace(".", "")
+
         price_str = (
             price_str.replace("€", "").replace("EUR", "").replace(",", ".").strip()
         )
@@ -216,6 +224,7 @@ class BaseCrawler:
         # Common fixups for all crawlers
         if data["barcode"] == "":
             data["barcode"] = f"{self.CHAIN}:{data['product_id']}"
+        data["barcode"] = data["barcode"].replace('"', "").replace("'", "").strip()
 
         if "special_price" not in data:
             data["special_price"] = None
