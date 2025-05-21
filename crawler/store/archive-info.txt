@@ -17,7 +17,8 @@ Objašnjenje:
 * `products.csv` - popis jedinstvenih proizvoda koje prodaje trgovački lanac
 * `prices.csv` - popis cijena proizvoda po poslovnici (referencira ID proizvoda i poslovnice)
 
-Arhiva sadrži podatke za sljedeće trgovačke lance: Konzum, Spar, Studenac, Plodine, Lidl, Tommy.
+Arhiva sadrži podatke za sljedeće trgovačke lance: Konzum, Spar, Studenac, Plodine, Lidl, Tommy,
+Kaufland.
 
 ## Formati CSV datoteka
 
