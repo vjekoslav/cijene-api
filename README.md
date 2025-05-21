@@ -16,6 +16,7 @@ Trenutno podržani trgovački lanci:
 * Studenac
 * Kaufland
 * Eurospin
+* dm
 
 ## Softverska implementacija
 
