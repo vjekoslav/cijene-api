@@ -59,6 +59,7 @@ class PlodineCrawler(BaseCrawler):
         Extract store information from CSV filename using regex.
 
         Example filename format:
+            SUPERMARKET_SJEVERNA_VEZNA_CESTA_31_35000_SLAVONSKI_BROD_022_6_20052025014212.csv
             SUPERMARKET_ULICA_FRANJE_TUDJMANA_83A_10450_JASTREBARSKO_063_2_16052025020937.csv
 
         Args:
@@ -70,7 +71,9 @@ class PlodineCrawler(BaseCrawler):
         logger.debug(f"Parsing store information from filename: {filename}")
 
         try:
-            pattern = r"^(SUPERMARKET|HIPERMARKET)_(.+?)_(\d{5})_([^_]+)_(\d+)_.*\.csv$"
+            pattern = (
+                r"^(SUPERMARKET|HIPERMARKET)_(.+?)_(\d{5})_(.+)_(\d+)_\d+_\d+.*\.csv$"
+            )
             match = re.match(pattern, filename)
 
             if not match:

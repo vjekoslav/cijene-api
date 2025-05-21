@@ -89,17 +89,19 @@ class KonzumCrawler(BaseCrawler):
         logger.debug(f"Decoded title: {title}")
 
         parts = [part.strip() for part in title.split(",")]
-        if len(parts) < 5:  # Ensure we have the expected number of parts
+        if len(parts) < 6:  # Ensure we have the expected number of parts
             raise ValueError(f"Invalid CSV title format: {title}")
 
         # Extract store type
         store_type = (parts[0]).lower()
-        store_id = parts[2]
+        store_id = parts[2] if len(parts) == 6 else parts[3]
 
-        # TODO: also add support for:
+        # Format:
+        # SUPERMARKET,REPUBLIKE 1 31300 BELI MANASTIR,0904,1629,21.05.2025, 05-22.CSV
         # SUPERMARKET,CARLOTTA GRISI 5, SVETI ANTON 52466 NOVIGRAD,3274,1332,19.05.2025, 05-52.CSV
-        # SUPERMARKET,PUŠKARIĆEVA 15,LUČKO 10250 ZAGREB,1271,1271,19.05.2025, 05-53.CSV
-        m = self.ADDRESS_PATTERN.match(parts[1])
+        m = self.ADDRESS_PATTERN.match(
+            parts[1] if len(parts) == 6 else f"{parts[1]} {parts[2]}"
+        )
         if not m:
             raise ValueError(f"Could not parse address from: {parts[1]}")
 
