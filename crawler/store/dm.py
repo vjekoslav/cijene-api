@@ -183,50 +183,41 @@ class DmCrawler(BaseCrawler):
         Raises:
             ValueError: If no price list is found for the given date.
         """
-        # Fetch JSON data from the index page
-        # Fetch JSON data from the index URL
         content = self.fetch_text(self.INDEX_URL)
         if not content:
             logger.warning(f"No content found at {self.INDEX_URL}")
             return []
 
-        try:
-            # Find Excel file URL for the exact target date from JSON
-            excel_url = self.find_excel_url(content, date)
-            logger.info(f"Found Excel file URL: {excel_url}")
+        # Find Excel file URL for the exact target date from JSON
+        excel_url = self.find_excel_url(content, date)
+        logger.info(f"Found Excel file URL: {excel_url}")
 
-            # Download Excel file
-            with TemporaryFile(mode="w+b") as temp_file:
-                self.fetch_binary(excel_url, temp_file)
-                temp_file.seek(0)
-                excel_data = temp_file.read()
+        # Download Excel file
+        with TemporaryFile(mode="w+b") as temp_file:
+            self.fetch_binary(excel_url, temp_file)
+            temp_file.seek(0)
+            excel_data = temp_file.read()
 
-            # Parse Excel file
-            products = self.parse_excel(excel_data)
+        # Parse Excel file
+        products = self.parse_excel(excel_data)
 
-            if not products:
-                logger.warning(f"No products found for date {date}")
-                return []
-
-            # Create a global store
-            store = Store(
-                chain=self.CHAIN,
-                store_type="store",
-                store_id=self.STORE_ID,
-                name=self.STORE_NAME,
-                street_address="",
-                zipcode="",
-                city="",
-                items=products,
-            )
-
-            return [store]
-
-        except Exception as e:
-            logger.error(
-                f"Error getting DM products for date {date}: {e}", exc_info=True
-            )
+        if not products:
+            logger.warning(f"No products found for date {date}")
             return []
+
+        # Create a global store
+        store = Store(
+            chain=self.CHAIN,
+            store_type="store",
+            store_id=self.STORE_ID,
+            name=self.STORE_NAME,
+            street_address="",
+            zipcode="",
+            city="",
+            items=products,
+        )
+
+        return [store]
 
 
 if __name__ == "__main__":
