@@ -5,7 +5,7 @@ from typing import Optional
 from json import loads
 
 
-from crawler.store.models import Store
+from crawler.store.models import Store, Product
 
 from .base import BaseCrawler
 
@@ -24,7 +24,7 @@ class SparCrawler(BaseCrawler):
     CHAIN = "spar"
     BASE_URL = "https://www.spar.hr"
     ADDRESS_PATTERN = re.compile(
-        r"^([a-zA-Z]+)_([a-zA-Z0-9_]+)_(\d{4,5})_([a-zA-Z_]+)_"
+        r"^([a-zA-Z]+)_([a-zA-Z0-9_\.]+)_(\d{4,5})_([a-zA-Z_]+)_"
     )
     CITIES = [
         "varazdin",
@@ -97,20 +97,7 @@ class SparCrawler(BaseCrawler):
     }
 
     # Required to detect text encoding
-    CSV_FIRST_LINE = (
-        "naziv;"
-        "šifra;"
-        "marka;"
-        "neto količina;"
-        "jedinica mjere;"
-        "MPC;"
-        "cijena za jedinicu mjere;"
-        "MPC za vrijeme posebnog oblika prodaje;"
-        "Najniža cijena u posljednjih 30 dana;"
-        "sidrena cijena na 2.5.2025.;"
-        "barkod;"
-        "kategorija proizvoda"
-    )
+    CSV_PREFIX = "naziv;šifra;marka;neto količina;jedinica mjere;"
 
     def fetch_price_list_index(self, date: datetime.date) -> dict[str, str]:
         """
@@ -183,6 +170,10 @@ class SparCrawler(BaseCrawler):
         )
         return store
 
+    def parse_csv_row(self, row: dict) -> Product:
+        fixed_row = {k.replace("(EUR)", "").strip(): v for k, v in row.items()}
+        return super().parse_csv_row(fixed_row)
+
     def get_all_products(self, date: datetime.date) -> list[Store]:
         """
         Main method to fetch and parse all products from Spar's price lists.
@@ -211,7 +202,7 @@ class SparCrawler(BaseCrawler):
                 continue
 
             csv_content = self.fetch_text(
-                url, ["iso-8859-2", "windows-1250"], self.CSV_FIRST_LINE
+                url, ["iso-8859-2", "windows-1250"], self.CSV_PREFIX
             )
             if not csv_content:
                 logger.warning(f"Skipping CSV from {url} due to download failure")
