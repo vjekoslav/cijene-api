@@ -31,6 +31,7 @@ class LidlCrawler(BaseCrawler):
     PRICE_MAP = {
         "price": ("MALOPRODAJNA_CIJENA", False),
         "unit_price": ("CIJENA_ZA_JEDINICU_MJERE", False),
+        "special_price": ("MPC_ZA_VRIJEME_POSEBNOG_OBLIKA_PRODAJE", False),
         "anchor_price": (ANCHOR_PRICE_COLUMN, False),
     }
 
@@ -142,7 +143,9 @@ class LidlCrawler(BaseCrawler):
                 continue
 
             # Parse CSV and add products to the store
-            products = self.parse_csv(content.decode("windows-1250"), delimiter=",")
+            text = content.decode("windows-1250")
+            delimiter = "\t" if "\t" in text.splitlines()[0] else ";"
+            products = self.parse_csv(text, delimiter=delimiter)
             store.items = products
             stores.append(store)
 
