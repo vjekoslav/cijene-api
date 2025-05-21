@@ -1,7 +1,5 @@
 import datetime
 import logging
-import urllib.parse
-import re
 import os
 from typing import List
 
