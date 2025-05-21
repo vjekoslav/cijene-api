@@ -15,6 +15,7 @@ Trenutno podržani trgovački lanci:
 * Tommy
 * Studenac
 * Kaufland
+* Eurospin
 
 ## Softverska implementacija
 
