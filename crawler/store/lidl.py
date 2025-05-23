@@ -144,7 +144,16 @@ class LidlCrawler(BaseCrawler):
 
             # Parse CSV and add products to the store
             text = content.decode("windows-1250")
-            delimiter = "\t" if "\t" in text.splitlines()[0] else ";"
+            headers = text.splitlines()[0]
+            if "\t" in headers:
+                delimiter = "\t"
+            elif ";" in headers:
+                delimiter = ";"
+            elif "," in headers:
+                delimiter = ","
+            else:
+                logger.warning(f"Unknown delimiter in CSV: {filename}; ignoring")
+                continue
             products = self.parse_csv(text, delimiter=delimiter)
             store.items = products
             stores.append(store)
