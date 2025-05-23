@@ -61,6 +61,7 @@ Stupci:
 * unit_price - cijena po jedinici mjere (ako je dostupno, inače prazno)
 * best_price_30 - najbolja cijena u zadnjih 30 dana (ako je dostupno, inače prazno)
 * anchor_price - cijena na 2.5.2025. (ako je dostupn, inače prazno)
+* special_price - cijena s popustom (ako je dostupno, inače prazno)
 
 ## Izvor i obrada podataka
 
