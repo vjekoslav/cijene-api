@@ -20,6 +20,8 @@ from crawler.store.ktc import KtcCrawler
 from crawler.store.metro import MetroCrawler
 from crawler.store.trgocentar import TrgocentarCrawler
 from crawler.store.zabac import ZabacCrawler
+from crawler.store.vrutak import VrutakCrawler
+
 
 from crawler.store.output import save_chain, copy_archive_info, create_archive
 
@@ -39,6 +41,7 @@ CRAWLERS = {
     MetroCrawler.CHAIN: MetroCrawler,
     TrgocentarCrawler.CHAIN: TrgocentarCrawler,
     ZabacCrawler.CHAIN: ZabacCrawler,
+    VrutakCrawler.CHAIN: VrutakCrawler,
 }
 
 

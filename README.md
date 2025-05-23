@@ -21,6 +21,7 @@ Trenutno podržani trgovački lanci:
 * Metro
 * Trgocentar
 * Žabac
+* Vrutak
 
 ## Softverska implementacija
 
