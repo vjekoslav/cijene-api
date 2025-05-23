@@ -257,7 +257,12 @@ class BaseCrawler:
 
         if data["price"] is None:
             if data.get("special_price") is None:
-                raise ValueError("Price and special price are both missing")
+                if data.get("unit_price") is not None:
+                    data["price"] = data["unit_price"]
+                else:
+                    raise ValueError(
+                        "Price, special price, and unit price are all missing"
+                    )
             else:
                 data["price"] = data["special_price"]
 
