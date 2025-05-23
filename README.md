@@ -19,6 +19,7 @@ Trenutno podržani trgovački lanci:
 * dm
 * KTC
 * Metro
+* Trgocentar
 
 ## Softverska implementacija
 
