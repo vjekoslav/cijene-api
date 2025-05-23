@@ -122,6 +122,7 @@ class KauflandCrawler(BaseCrawler):
             raise ValueError("Failed to find JSON URL in Kaufland index page")
 
         # 3. Fetch the JSON data from the URL
+        logger.debug(f"Fetching JSON data from {json_url}")
         json_content = self.fetch_text(json_url)
         if not json_content:
             raise ValueError("Failed to fetch JSON data from Kaufland index page")
