@@ -39,20 +39,54 @@ class EurospinCrawler(BaseCrawler):
         "category": ("KATEGORIJA_PROIZVODA", False),
     }
 
+    STORE_ID_MAP = {
+        "Ulica hrvatskog preporoda 70 Dugo Selo": "310032",
+        "Ulica Rimske centurijacije 100": "310013",
+        "Ulica Juraja Dobrile 1C": "310006",
+        "Zagrebacka ul 49G": "310012",
+        "Gacka ulica 70": "310017",
+        "Ulica Istarskih narodnjaka 17 Stop Shop": "310027",
+        "Zagrebacka cesta 162A": "310018",
+        "Ulica Ote Horvata 1 33000 Virovitica": "310036",
+        "Cesta Dalmatinskih brigada 7a": "310030",
+        "Celine 2": "310009",
+        "Ulica Mate Vlašica 51A": "310010",
+        "Koprivnicka ulica 34A": "310033",
+        "Ulica Furicevo 20": "310016",
+        "Zvonarska ulica 63": "310035",
+        "Ulica Petra Svacica 2B": "310014",
+        "Zagrebacka 52": "310004",
+        "Ulica Matije Gupca 59": "310021",
+        "Ulica Mihovila P Miškine 5": "310024",
+        "4 Gardijske Brigade 1": "310003",
+        "Ulica hrvatskih branitelja 2": "310005",
+        "Ulica Ante Starcevica 20": "310019",
+        "I Štefanovecki zavoj 12": "310002",
+        "Štrmac 303": "310026",
+        "Ljudevita Šestica 7": "310037",
+        "Ulica Vlahe Paljetka 7": "310011",
+        "Ulica Veceslava Holjevca 15": "310034",
+        "Stop shop": "310028",
+        "Solinska ulica 84": "310015",
+        "Obrtnicka ulica 2": "310008",
+        "Ulica kralja Tomislava 47A": "310007",
+        "Žutska ulica broj 1": "310023",
+    }
+
     def parse_index(self, content: str) -> list[str]:
         """
-        Parse the Eurospin index page to extract CSV links.
+        Parse the Eurospin index page to extract ZIP links.
 
         Args:
             content: HTML content of the index page
 
         Returns:
-            List of CSV urls on the page
+            List of ZIP urls on the page
         """
         soup = BeautifulSoup(content, "html.parser")
         urls = []
 
-        csv_options = soup.select("option[value$='.csv']")
+        csv_options = soup.select("option[value$='.zip']")
         for option in csv_options:
             href = str(option.get("value"))
             if href.startswith(("http://", "https://")):
@@ -66,7 +100,8 @@ class EurospinCrawler(BaseCrawler):
         """
         Extracts store information from a CSV download URL.
 
-        Example URL:
+        Example filename:
+            supermarket-Zvonarska_ulica_63-Vinkovci-32100-23.05.2025-7.30.csv:
         https://www.eurospin.hr/wp-content/themes/eurospin/documenti-prezzi/supermarket-310037-Ljudevita_Šestica_7-Karlovac-123456-21.05.2025-7.30.csv
 
         Args:
@@ -80,8 +115,16 @@ class EurospinCrawler(BaseCrawler):
         filename = os.path.basename(url)
         parts = filename.split("-")
 
-        if len(parts) < 7:
+        if len(parts) < 6:
             raise ValueError(f"Invalid CSV filename format: {filename}")
+
+        if len(parts) == 6:
+            addr = parts[1].replace("_", " ")
+            store_id = self.STORE_ID_MAP.get(addr, addr)
+            logger.debug(
+                f"Store ID missing, assuming '{store_id}' based on address '{addr}'"
+            )
+            parts.insert(1, store_id)
 
         store_type = parts[0].lower()
         store_id = parts[1]
@@ -107,7 +150,7 @@ class EurospinCrawler(BaseCrawler):
         )
         return store
 
-    def get_store_prices(self, csv_url: str) -> List[Product]:
+    def get_store_prices(self, content: bytes) -> List[Product]:
         """
         Fetch and parse store prices from a CSV URL.
 
@@ -118,45 +161,37 @@ class EurospinCrawler(BaseCrawler):
             List of Product objects
         """
         try:
-            content = self.fetch_text(csv_url)
-            return self.parse_csv(content, delimiter=";")
+            return self.parse_csv(content.decode("windows-1250"), delimiter=";")
         except Exception as e:
-            logger.error(
-                f"Failed to get store prices from {csv_url}: {e}",
-                exc_info=True,
-            )
+            logger.error(f"Failed to get store prices: {e}", exc_info=True)
             return []
 
-    def get_index(self, date: datetime.date) -> list[str]:
+    def get_index(self, date: datetime.date) -> str | None:
         """
-        Fetch and parse the index page to get CSV URLs for the specified date.
+        Fetch and parse the index page to get ZIP URL for the specified date.
 
         Args:
             date: The date to search for in the price list.
 
         Returns:
-            List of CSV URLs containing prices for the specified date
+            URL to the zip file containing CSVs with prices, or None if not found.
         """
         content = self.fetch_text(self.INDEX_URL)
 
         if not content:
             logger.warning(f"No content found at {self.INDEX_URL}")
-            return []
+            return None
 
         all_urls = self.parse_index(content)
         date_str = f"{date.day:02d}.{date.month:02d}.{date.year}"
 
-        # Filter URLs by date
-        matching_urls = []
         for url in all_urls:
             filename = os.path.basename(url)
             if date_str in filename:
-                matching_urls.append(url)
-
-        if not matching_urls:
+                return url
+        else:
             logger.warning(f"No URLs found matching date {date_str}")
-
-        return matching_urls
+            return None
 
     def get_all_products(self, date: datetime.date) -> list[Store]:
         """
@@ -171,24 +206,26 @@ class EurospinCrawler(BaseCrawler):
         Raises:
             ValueError: If no price list is found for the given date.
         """
-        csv_links = self.get_index(date)
+        zip_url = self.get_index(date)
 
-        if not csv_links:
-            logger.warning(f"No CSV links found for date {date}")
+        if not zip_url:
+            logger.warning(f"ZIP archive URL not found for date {date}")
             return []
 
         stores = []
 
-        for url in csv_links:
+        for filename, content in self.get_zip_contents(zip_url, ".csv"):
             try:
-                store = self.parse_store_info(url)
-                products = self.get_store_prices(url)
+                store = self.parse_store_info(filename)
+                products = self.get_store_prices(content)
             except Exception as e:
-                logger.error(f"Error processing store from {url}: {e}", exc_info=True)
+                logger.error(
+                    f"Error processing store from {filename}: {e}", exc_info=True
+                )
                 continue
 
             if not products:
-                logger.warning(f"No products found for store at {url}, skipping")
+                logger.warning(f"No products found in {filename}, skipping")
                 continue
 
             store.items = products
