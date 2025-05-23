@@ -20,6 +20,7 @@ Trenutno podržani trgovački lanci:
 * KTC
 * Metro
 * Trgocentar
+* Žabac
 
 ## Softverska implementacija
 
