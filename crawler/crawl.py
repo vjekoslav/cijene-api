@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import os
 import datetime
 from typing import List
@@ -47,7 +48,15 @@ def get_chains() -> List[str]:
     return list(CRAWLERS.keys())
 
 
-def crawl_chain(chain: str, date: datetime.date, path: Path):
+@dataclass
+class CrawlResult:
+    elapsed_time: float = 0
+    n_stores: int = 0
+    n_products: int = 0
+    n_prices: int = 0
+
+
+def crawl_chain(chain: str, date: datetime.date, path: Path) -> CrawlResult:
     """
     Crawl a specific retail chain for product/pricing data and save it.
 
@@ -62,19 +71,33 @@ def crawl_chain(chain: str, date: datetime.date, path: Path):
         raise ValueError(f"Unknown retail chain: {chain}")
 
     crawler = crawler_class()
+    t0 = time()
     try:
         stores = crawler.get_all_products(date)
     except Exception as err:
         logger.error(
             f"Error crawling {chain} for {date:%Y-%m-%d}: {err}", exc_info=True
         )
-        return
+        return CrawlResult()
 
     if not stores:
         logger.error(f"No stores imported for {chain} on {date}")
-        return
+        return CrawlResult()
 
     save_chain(path, stores)
+    t1 = time()
+
+    all_products = set()
+    for store in stores:
+        for product in store.items:
+            all_products.add(product.product_id)
+
+    return CrawlResult(
+        elapsed_time=t1 - t0,
+        n_stores=len(stores),
+        n_products=len(all_products),
+        n_prices=sum(len(store.items) for store in stores),
+    )
 
 
 def crawl(
@@ -104,13 +127,20 @@ def crawl(
     zip_path = root / f"{date:%Y-%m-%d}.zip"
     os.makedirs(path, exist_ok=True)
 
+    results = {}
+
     t0 = time()
     for chain in chains:
         logger.info(f"Starting crawl for {chain} on {date:%Y-%m-%d}")
-        crawl_chain(chain, date, path / chain)
+        r = crawl_chain(chain, date, path / chain)
+        results[chain] = r
     t1 = time()
 
     logger.info(f"Crawled {','.join(chains)} for {date:%Y-%m-%d} in {t1 - t0:.2f}s")
+    for chain, r in results.items():
+        logger.info(
+            f"  * {chain}: {r.n_stores} stores, {r.n_products} products, {r.n_prices} prices in {r.elapsed_time:.2f}s"
+        )
 
     copy_archive_info(path)
     create_archive(path, zip_path)
