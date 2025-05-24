@@ -22,6 +22,7 @@ Trenutno podržani trgovački lanci:
 * Trgocentar
 * Žabac
 * Vrutak
+* Ribola
 
 ## Softverska implementacija
 

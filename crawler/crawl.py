@@ -10,6 +10,7 @@ from time import time
 from crawler.store.konzum import KonzumCrawler
 from crawler.store.lidl import LidlCrawler
 from crawler.store.plodine import PlodineCrawler
+from crawler.store.ribola import RibolaCrawler
 from crawler.store.spar import SparCrawler
 from crawler.store.studenac import StudenacCrawler
 from crawler.store.tommy import TommyCrawler
@@ -42,6 +43,7 @@ CRAWLERS = {
     TrgocentarCrawler.CHAIN: TrgocentarCrawler,
     ZabacCrawler.CHAIN: ZabacCrawler,
     VrutakCrawler.CHAIN: VrutakCrawler,
+    RibolaCrawler.CHAIN: RibolaCrawler,
 }
 
 
