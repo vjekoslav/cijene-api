@@ -23,6 +23,7 @@ Trenutno podržani trgovački lanci:
 * Žabac
 * Vrutak
 * Ribola
+* NTL
 
 ## Softverska implementacija
 
