@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from service.routers import v0
@@ -11,6 +12,15 @@ app = FastAPI(
     description="Service for product pricing data by Croatian grocery chains",
     version=settings.version,
     debug=settings.debug,
+)
+
+# Add CORS middleware to allow all origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Include versioned routers
