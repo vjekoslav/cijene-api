@@ -4,7 +4,7 @@ from logging import getLogger
 from tempfile import NamedTemporaryFile
 from typing import Any, BinaryIO, Generator
 from time import time
-from zipfile import BadZipfile, ZipFile
+from zipfile import ZipFile
 import datetime
 from bs4 import BeautifulSoup
 from re import Pattern
@@ -111,24 +111,11 @@ class BaseCrawler:
     def read_csv(self, text: str, delimiter: str = ",") -> DictReader:
         return DictReader(text.splitlines(), delimiter=delimiter)  # type: ignore
 
-    @staticmethod
-    def _fallback_unzip(zf_name: str, file: str) -> bytes | None:
-        import subprocess
-
-        try:
-            result = subprocess.run(
-                ["unzip", "-x", "-p", zf_name, file],
-                capture_output=True,
-            )
-            return result.stdout or None
-        except FileNotFoundError:
-            return None
-
     def get_zip_contents(
         self, url: str, suffix: str
     ) -> Generator[tuple[str, bytes], None, None]:
         with NamedTemporaryFile(mode="w+b") as temp_zip:
-            self.fetch_binary(url, temp_zip)
+            self.fetch_binary(url, temp_zip)  # type: ignore
             temp_zip.seek(0)
 
             with ZipFile(temp_zip, "r") as zip_fp:
@@ -142,19 +129,6 @@ class BaseCrawler:
                         with zip_fp.open(file_info) as file:
                             xml_content = file.read()
                             yield (file_info.filename, xml_content)
-                    except BadZipfile:
-                        logger.debug(
-                            f"Bad ZIP filename entry: {file_info.filename}, trying fallback"
-                        )
-                        xml_content = self._fallback_unzip(
-                            temp_zip.name, file_info.filename
-                        )
-                        if xml_content is None:
-                            logger.error(
-                                f"Error extracting {file_info.filename} from ZIP file"
-                            )
-                            continue
-                        yield (file_info.filename, xml_content)
                     except Exception as e:
                         logger.error(
                             f"Error processing file {file_info.filename}: {e}",
