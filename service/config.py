@@ -17,5 +17,13 @@ class Settings:
         self.timezone: str = os.getenv("TIMEZONE", "Europe/Zagreb")
         self.redirect_url: str = os.getenv("REDIRECT_URL", "https://cijene.dev")
 
+        # Database configuration
+        self.db_dsn: str = os.getenv(
+            "DB_DSN",
+            "postgresql://postgres:postgres@localhost/cijene",
+        )
+        self.db_min_connections: int = int(os.getenv("DB_MIN_CONNECTIONS", "5"))
+        self.db_max_connections: int = int(os.getenv("DB_MAX_CONNECTIONS", "20"))
+
 
 settings = Settings()
