@@ -2,7 +2,16 @@ from abc import ABC, abstractmethod
 from datetime import date
 from typing import Dict, Any, Optional
 
-from .models import Chain, Store, Product, ChainProduct, Price
+from .models import (
+    Chain,
+    ChainWithId,
+    ProductWithId,
+    Store,
+    ChainProduct,
+    Price,
+    StoreWithId,
+    ChainProductWithId,
+)
 
 
 class Database(ABC):
@@ -37,7 +46,7 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def list_chains(self) -> list[Chain]:
+    async def list_chains(self) -> list[ChainWithId]:
         """
         List all chains in the database.
 
@@ -61,7 +70,7 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def list_stores(self, chain_code: str) -> list[Store]:
+    async def list_stores(self, chain_code: str) -> list[StoreWithId]:
         """
         List all stores for a particular chain.
 
@@ -109,33 +118,47 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def get_product_by_ean(self, ean: str) -> Product | None:
+    async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
         """
-        Get product by EAN code.
+        Get products by their EAN codes.
 
         Args:
-            ean: The EAN code to search for.
+            ean: The EAN codes to search for.
 
         Returns:
-            A Product object if found, otherwise None.
+            A list of Product objects matching the EAN codes.
         """
         pass
 
     @abstractmethod
     async def get_chain_products_for_product(
         self,
-        product_id: int,
+        product_ids: list[int],
         chain_ids: list[int] | None = None,
-    ) -> list[ChainProduct]:
+    ) -> list[ChainProductWithId]:
         """
-        Get all chain products for a specific product ID.
+        Get all chain products for specified product IDs.
 
         Args:
-            product_id: The ID of the product to search for.
+            product_ids: The IDs of the products to search for.
             chain_ids: Optional list of chain IDs to filter by.
 
         Returns:
-            A list of ChainProduct objects associated with the product.
+            A list of ChainProduct objects associated with the products.
+        """
+        pass
+
+    @abstractmethod
+    async def search_products(self, query: str) -> list[ProductWithId]:
+        """
+        Search for products by name using full text search.
+
+        Args:
+            query: The search query string.
+
+        Returns:
+            A list of products matching the search query,
+            ordered by relevance.
         """
         pass
 
@@ -188,27 +211,30 @@ class Database(ABC):
 
     @abstractmethod
     async def get_product_prices(
-        self, product_id: int, date: date
+        self,
+        product_ids: list[int],
+        date: date,
     ) -> list[dict[str, Any]]:
         """
-        Get computed chain prices across all chains for a specific product
-        on a given date. If there are no prices for the product on that date,
-        return the latest available prices.
+        Get computed chain prices across all chains for specified products
+        on a given date. If there are no prices for a product on that date,
+        return the latest available prices for that product.
 
         Shape of the returned dictionaries is:
         {
-            "chain_id": int,
+            "chain": str,
+            "product_id": int,
             "min_price": Decimal,
             "max_price": Decimal,
             "avg_price": Decimal
         }
 
         Args:
-            product_id: The ID of the product to search for.
+            product_ids: The IDs of the products to search for.
             date: The date for which to fetch prices.
 
         Returns:
-            Information for the specified product and date.
+            Information for the specified products and date.
         """
         pass
 

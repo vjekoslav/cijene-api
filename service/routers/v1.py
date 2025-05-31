@@ -1,10 +1,10 @@
 from decimal import Decimal
-from typing import cast
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 import datetime
 
 from service.config import settings
+from service.db.models import ProductWithId
 
 router = APIRouter()
 db = settings.get_db()
@@ -72,17 +72,7 @@ async def list_stores(chain_code: str) -> ListStoresResponse:
     )
 
 
-class ProductInfoResponse(BaseModel):
-    """Basic product information response schema."""
-
-    ean: str = Field(..., description="EAN barcode of the product.")
-    brand: str | None = Field(..., description="Brand of the product.")
-    name: str | None = Field(..., description="Name of the product.")
-    quantity: str | None = Field(..., description="Quantity of the product.")
-    unit: str | None = Field(..., description="Unit of the product.")
-
-
-class ChainProductPriceResponse(BaseModel):
+class ChainProductResponse(BaseModel):
     """Chain product with price information response schema."""
 
     chain: str = Field(..., description="Chain code.")
@@ -98,12 +88,95 @@ class ChainProductPriceResponse(BaseModel):
 
 
 class ProductResponse(BaseModel):
-    """Product with chains and prices response schema."""
+    """Basic product information response schema."""
 
-    product: ProductInfoResponse = Field(..., description="Basic product information.")
-    chains: list[ChainProductPriceResponse] = Field(
-        ..., description="Chain-specific product and price information."
+    ean: str = Field(..., description="EAN barcode of the product.")
+    brand: str | None = Field(..., description="Brand of the product.")
+    name: str | None = Field(..., description="Name of the product.")
+    quantity: str | None = Field(..., description="Quantity of the product.")
+    unit: str | None = Field(..., description="Unit of the product.")
+    chains: list[ChainProductResponse] = Field(
+        ..., description="List of chain-specific product information."
     )
+
+
+class ProductSearchResponse(BaseModel):
+    products: list[ProductResponse] = Field(
+        ..., description="List of products matching the search query."
+    )
+
+
+async def prepare_product_response(
+    products: list[ProductWithId],
+    date: datetime.date | None,
+    filtered_chains: list[str] | None,
+) -> list[ProductResponse]:
+    chains = await db.list_chains()
+    if filtered_chains:
+        chains = [c for c in chains if c.code in filtered_chains]
+    chain_id_to_code = {chain.id: chain.code for chain in chains}
+
+    if not date:
+        date = datetime.date.today()
+
+    product_ids = [product.id for product in products]
+
+    chain_products = await db.get_chain_products_for_product(
+        product_ids,
+        [chain.id for chain in chains],
+    )
+    prices = await db.get_product_prices(product_ids, date)
+
+    product_response_map = {
+        product.id: ProductResponse(
+            ean=product.ean,
+            brand=product.brand or "",
+            name=product.name or "",
+            quantity=str(product.quantity) if product.quantity else None,
+            unit=product.unit,
+            chains=[],
+        )
+        for product in products
+    }
+
+    cpr_map = {}
+    for cp in chain_products:
+        product_id = cp.product_id
+        chain = chain_id_to_code[cp.chain_id]
+
+        cpr_data = cp.to_dict()
+        cpr_data["chain"] = chain
+        cpr_map[(product_id, chain)] = cpr_data
+
+    prices = await db.get_product_prices(product_ids, date)
+    for p in prices:
+        product_id = p["product_id"]
+        chain = p["chain"]
+        cpr_data = cpr_map.get((product_id, chain))
+        if not cpr_data:
+            continue
+
+        cpr_data["min_price"] = p["min_price"]
+        cpr_data["max_price"] = p["max_price"]
+        cpr_data["avg_price"] = p["avg_price"]
+        product_response_map[product_id].chains.append(ChainProductResponse(**cpr_data))
+
+    # Fixup global product brand and name using chain data
+    # Logic here is that the longest string is the most likely to be most useful
+    for product in product_response_map.values():
+        if not product.brand:
+            chain_brands = [cpr.brand for cpr in product.chains if cpr.brand]
+            chain_brands.sort(key=lambda x: len(x))
+            if chain_brands:
+                product.brand = chain_brands[0].capitalize()
+
+        if not product.name:
+            chain_names = [cpr.name for cpr in product.chains if cpr.name]
+            chain_names.sort(key=lambda x: len(x), reverse=True)
+            if chain_names:
+                product.name = chain_names[0].capitalize()
+
+    return [p for p in product_response_map.values() if p.chains]
 
 
 @router.get("/products/{ean}/")
@@ -124,80 +197,60 @@ async def get_product(
     The price information is for the last known date earlier than or
     equal to the specified date. If no date is provided, current date is used.
     """
-    # Parse and validate date parameter
-    if not date:
-        date = datetime.date.today()
 
-    product = await db.get_product_by_ean(ean)
-    if not product:
+    products = await db.get_products_by_ean([ean])
+    if not products:
         raise HTTPException(
             status_code=404,
             detail=f"Product with EAN {ean} not found",
         )
 
-    product_id = cast(int, product.id)
-
-    all_chains = await db.list_chains()
-    chain_id_to_code = {cast(int, chain.id): chain.code for chain in all_chains}
-
-    chain_ids = []
-    if chains:
-        filter_chain_codes = [c.strip().lower() for c in chains.split(",")]
-        chain_ids = [
-            cast(int, c.id) for c in all_chains if c.code in filter_chain_codes
-        ]
-
-    chain_products = await db.get_chain_products_for_product(product_id, chain_ids)
-    chain_responses = {}
-
-    for cp in chain_products:
-        cpr = cp.to_dict()
-        cpr["chain"] = chain_id_to_code[cpr.pop("chain_id")]
-        chain_responses[cp.chain_id] = cpr
-
-    prices = await db.get_product_prices(product_id, date)
-
-    for p in prices:
-        cpr = chain_responses.get(p["chain_id"])
-        if not cpr:
-            continue
-        cpr["min_price"] = p["min_price"]
-        cpr["max_price"] = p["max_price"]
-        cpr["avg_price"] = p["avg_price"]
-
-    # Remove chain products that do not have corresponding chain prices
-    filtered_chain_responses = [
-        cpr
-        for cpr in chain_responses.values()
-        if ("min_price" in cpr and "max_price" in cpr and "avg_price" in cpr)
-    ]
-
-    # Fixup global product brand and name using chain data
-    # Logic here is that the longest string is the most likely to be most useful
-
-    product_brand = product.brand
-    if not product_brand:
-        chain_brands = [cpr.get("brand") for cpr in filtered_chain_responses]
-        chain_brands = [b for b in chain_brands if b]
-        chain_brands.sort(key=lambda x: len(x))
-        if chain_brands:
-            product_brand = chain_brands[0].capitalize()
-
-    product_name = product.name
-    if not product_name:
-        chain_names = [cpr.get("name") for cpr in filtered_chain_responses]
-        chain_names = [n for n in chain_names if n]
-        chain_names.sort(key=lambda x: len(x), reverse=True)
-        if chain_names:
-            product_name = chain_names[0].capitalize()
-
-    return ProductResponse(
-        product=ProductInfoResponse(
-            ean=product.ean,
-            brand=product_brand,
-            name=product_name,
-            quantity=str(product.quantity) if product.quantity else None,
-            unit=product.unit,
+    product_responses = await prepare_product_response(
+        products=products,
+        date=date,
+        filtered_chains=(
+            [c.lower().strip() for c in chains.split(",")] if chains else None
         ),
-        chains=[ChainProductPriceResponse(**cpr) for cpr in filtered_chain_responses],
     )
+
+    if not product_responses:
+        with_chains = " with specified chains" if chains else ""
+        raise HTTPException(
+            status_code=404,
+            detail=f"No product information found for EAN {ean}{with_chains}",
+        )
+
+    return product_responses[0]
+
+
+@router.get("/products/")
+async def search_products(
+    q: str = Query(..., description="Search query for product names"),
+    date: datetime.date = Query(
+        None,
+        description="Date in YYYY-MM-DD format, defaults to today",
+    ),
+    chains: str = Query(
+        None,
+        description="Comma-separated list of chain codes to include",
+    ),
+) -> ProductSearchResponse:
+    """
+    Search for products by name.
+
+    Returns a list of products that match the search query.
+    """
+    if not q.strip():
+        return ProductSearchResponse(products=[])
+
+    products = await db.search_products(q)
+
+    product_responses = await prepare_product_response(
+        products=products,
+        date=date,
+        filtered_chains=(
+            [c.lower().strip() for c in chains.split(",")] if chains else None
+        ),
+    )
+
+    return ProductSearchResponse(products=product_responses)

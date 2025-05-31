@@ -2,23 +2,27 @@ from typing import Optional
 from datetime import date
 from decimal import Decimal
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class User:
     name: str
     api_key: str
     is_active: bool = True
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Chain:
     code: str
-    id: int | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChainWithId(Chain):
+    id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Store:
     chain_id: int
     code: str
@@ -28,17 +32,26 @@ class Store:
     zipcode: Optional[str] = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class StoreWithId(Store):
+    id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class Product:
     ean: str
     brand: Optional[str] = None
     name: Optional[str] = None
     quantity: Optional[Decimal] = None
     unit: Optional[str] = None
-    id: int | None = None
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ProductWithId(Product):
+    id: int
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class ChainProduct:
     chain_id: int
     product_id: int
@@ -50,7 +63,12 @@ class ChainProduct:
     quantity: Optional[str] = None
 
     def to_dict(self):
-        return {k: getattr(self, k) for k in self.__slots__}
+        return {f.name: getattr(self, f.name) for f in fields(self)}
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ChainProductWithId(ChainProduct):
+    id: int
 
 
 @dataclass(frozen=True, slots=True)
