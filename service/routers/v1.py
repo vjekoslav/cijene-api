@@ -1,8 +1,8 @@
 from decimal import Decimal
 from typing import cast
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
-from datetime import date
+import datetime
 
 from service.config import settings
 
@@ -107,27 +107,47 @@ class ProductResponse(BaseModel):
 
 
 @router.get("/products/{ean}/")
-async def get_product(ean: str) -> ProductResponse:
+async def get_product(
+    ean: str,
+    date: datetime.date = Query(
+        None,
+        description="Date in YYYY-MM-DD format, defaults to today",
+    ),
+    chains: str = Query(
+        None,
+        description="Comma-separated list of chain codes to include",
+    ),
+) -> ProductResponse:
     """
     Get product information including chain products and prices by EAN.
 
-    Args:
-        ean: The EAN barcode of the product.
-
-    Returns:
-        Product information with chain products and price data.
+    The price information is for the last known date earlier than or
+    equal to the specified date. If no date is provided, current date is used.
     """
+    # Parse and validate date parameter
+    if not date:
+        date = datetime.date.today()
+
     product = await db.get_product_by_ean(ean)
     if not product:
-        raise HTTPException(status_code=404, detail=f"Product with EAN {ean} not found")
+        raise HTTPException(
+            status_code=404,
+            detail=f"Product with EAN {ean} not found",
+        )
 
     product_id = cast(int, product.id)
 
-    chain_id_to_code = {
-        cast(int, chain.id): chain.code for chain in await db.list_chains()
-    }
+    all_chains = await db.list_chains()
+    chain_id_to_code = {cast(int, chain.id): chain.code for chain in all_chains}
 
-    chain_products = await db.get_chain_products_for_product(product_id)
+    chain_ids = []
+    if chains:
+        filter_chain_codes = [c.strip().lower() for c in chains.split(",")]
+        chain_ids = [
+            cast(int, c.id) for c in all_chains if c.code in filter_chain_codes
+        ]
+
+    chain_products = await db.get_chain_products_for_product(product_id, chain_ids)
     chain_responses = {}
 
     for cp in chain_products:
@@ -135,9 +155,7 @@ async def get_product(ean: str) -> ProductResponse:
         cpr["chain"] = chain_id_to_code[cpr.pop("chain_id")]
         chain_responses[cp.chain_id] = cpr
 
-    today = date.today()
-
-    prices = await db.get_product_prices(product_id, today)
+    prices = await db.get_product_prices(product_id, date)
 
     for p in prices:
         cpr = chain_responses.get(p["chain_id"])

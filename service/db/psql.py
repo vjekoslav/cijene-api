@@ -187,26 +187,37 @@ class PostgresDatabase(Database):
     async def get_chain_products_for_product(
         self,
         product_id: int,
+        chain_ids: list[int] | None = None,
     ) -> list[ChainProduct]:
         """
         Get all chain products for a specific product ID.
 
         Args:
             product_id: The ID of the product to search for.
+            chain_ids: Optional list of chain IDs to filter by.
 
         Returns:
             A list of ChainProduct objects associated with the product.
         """
         async with self._get_conn() as conn:
-            rows = await conn.fetch(
+            if chain_ids:
+                # Use ANY for filtering by chain IDs
+                query = """
+                    SELECT
+                        chain_id, product_id, code, name, brand, category, unit, quantity
+                    FROM chain_products
+                    WHERE product_id = $1 AND chain_id = ANY($2)
                 """
-                SELECT
-                    chain_id, product_id, code, name, brand, category, unit, quantity
-                FROM chain_products
-                WHERE product_id = $1
-                """,
-                product_id,
-            )
+                rows = await conn.fetch(query, product_id, chain_ids)
+            else:
+                # Original query when no chain filtering
+                query = """
+                    SELECT
+                        chain_id, product_id, code, name, brand, category, unit, quantity
+                    FROM chain_products
+                    WHERE product_id = $1
+                """
+                rows = await conn.fetch(query, product_id)
             return [ChainProduct(**row) for row in rows]  # type: ignore
 
     async def get_product_prices(

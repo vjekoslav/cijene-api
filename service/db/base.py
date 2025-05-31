@@ -125,12 +125,14 @@ class Database(ABC):
     async def get_chain_products_for_product(
         self,
         product_id: int,
+        chain_ids: list[int] | None = None,
     ) -> list[ChainProduct]:
         """
         Get all chain products for a specific product ID.
 
         Args:
             product_id: The ID of the product to search for.
+            chain_ids: Optional list of chain IDs to filter by.
 
         Returns:
             A list of ChainProduct objects associated with the product.
