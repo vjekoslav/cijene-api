@@ -11,11 +11,11 @@ from typing import (
 import logging
 import os
 from datetime import date
-from .base import DatabaseInterface
+from .base import Database
 from .models import Chain, Store, ChainProduct, Price
 
 
-class PostgresDatabase(DatabaseInterface):
+class PostgresDatabase(Database):
     """PostgreSQL implementation of the database interface using asyncpg."""
 
     def __init__(self, dsn: str, min_size: int = 10, max_size: int = 30):

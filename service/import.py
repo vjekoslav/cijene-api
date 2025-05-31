@@ -10,16 +10,11 @@ from csv import DictReader
 from time import time
 
 from service.config import settings
-from service.db.psql import PostgresDatabase
 from service.db.models import Chain, Store, ChainProduct, Price
 
 logger = logging.getLogger("importer")
 
-db = PostgresDatabase(
-    dsn=settings.db_dsn,
-    min_size=settings.db_min_connections,
-    max_size=settings.db_max_connections,
-)
+db = settings.get_db()
 
 
 async def read_csv(file_path: Path) -> List[Dict[str, str]]:

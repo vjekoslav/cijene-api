@@ -3,15 +3,28 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from contextlib import asynccontextmanager
 
 from service.routers import v0
 from service.config import settings
+
+db = settings.get_db()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager to handle startup and shutdown events."""
+    await db.connect()
+    yield
+    await db.close()
+
 
 app = FastAPI(
     title="Cijene API",
     description="Service for product pricing data by Croatian grocery chains",
     version=settings.version,
     debug=settings.debug,
+    lifespan=lifespan,
 )
 
 # Add CORS middleware to allow all origins

@@ -5,7 +5,7 @@ from typing import Dict, Any, Optional
 from .models import Chain, Store, ChainProduct, Price
 
 
-class DatabaseInterface(ABC):
+class Database(ABC):
     """Base abstract class for database implementations."""
 
     @abstractmethod
@@ -145,3 +145,25 @@ class DatabaseInterface(ABC):
             A dictionary with user information if found, otherwise None.
         """
         pass
+
+    @staticmethod
+    def from_url(url: str, **kwargs: Any) -> "Database":
+        """
+        Get the database instance based on the configured settings.
+
+        Returns:
+            An instance of the Database subclass based on the DSN.
+
+        Raises:
+            ValueError: If the database type is not supported.
+        """
+
+        from service.db.psql import PostgresDatabase
+
+        if url.startswith("postgresql"):
+            return PostgresDatabase(
+                dsn=url,
+                **kwargs,
+            )
+        else:
+            raise ValueError(f"Unsupported database: {url}")
