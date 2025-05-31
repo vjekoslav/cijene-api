@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from contextlib import asynccontextmanager
 
-from service.routers import v0
+from service.routers import v0, v1
 from service.config import settings
 
 db = settings.get_db()
@@ -38,6 +38,7 @@ app.add_middleware(
 
 # Include versioned routers
 app.include_router(v0.router, prefix="/v0")
+app.include_router(v1.router, prefix="/v1")
 
 
 @app.exception_handler(404)
