@@ -15,6 +15,7 @@ class User:
 @dataclass(frozen=True, slots=True)
 class Chain:
     code: str
+    id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,6 +35,7 @@ class Product:
     name: Optional[str] = None
     quantity: Optional[Decimal] = None
     unit: Optional[str] = None
+    id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,6 +48,9 @@ class ChainProduct:
     category: Optional[str] = None
     unit: Optional[str] = None
     quantity: Optional[str] = None
+
+    def to_dict(self):
+        return {k: getattr(self, k) for k in self.__slots__}
 
 
 @dataclass(frozen=True, slots=True)

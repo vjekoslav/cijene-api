@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from datetime import date
 from typing import Dict, Any, Optional
 
-from .models import Chain, Store, ChainProduct, Price
+from .models import Chain, Store, Product, ChainProduct, Price
 
 
 class Database(ABC):
@@ -23,7 +23,6 @@ class Database(ABC):
         """Close all database connections."""
         pass
 
-    # Chain methods
     @abstractmethod
     async def add_chain(self, chain: Chain) -> int:
         """
@@ -38,6 +37,16 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def list_chains(self) -> list[Chain]:
+        """
+        List all chains in the database.
+
+        Returns:
+            A list of Chain objects representing all chains.
+        """
+        pass
+
+    @abstractmethod
     async def add_store(self, store: Store) -> int:
         """
         Add a new store or update existing one and return its ID.
@@ -48,6 +57,19 @@ class Database(ABC):
 
         Returns:
             The database ID of the created or updated store.
+        """
+        pass
+
+    @abstractmethod
+    async def list_stores(self, chain_code: str) -> list[Store]:
+        """
+        List all stores for a particular chain.
+
+        Args:
+            chain_code: The code of the chain to list stores for.
+
+        Returns:
+            A list of Store objects representing chain stores.
         """
         pass
 
@@ -83,6 +105,35 @@ class Database(ABC):
 
         Returns:
             The ID of the created product.
+        """
+        pass
+
+    @abstractmethod
+    async def get_product_by_ean(self, ean: str) -> Product | None:
+        """
+        Get product by EAN code.
+
+        Args:
+            ean: The EAN code to search for.
+
+        Returns:
+            A Product object if found, otherwise None.
+        """
+        pass
+
+    @abstractmethod
+    async def get_chain_products_for_product(
+        self,
+        product_id: int,
+    ) -> list[ChainProduct]:
+        """
+        Get all chain products for a specific product ID.
+
+        Args:
+            product_id: The ID of the product to search for.
+
+        Returns:
+            A list of ChainProduct objects associated with the product.
         """
         pass
 
@@ -130,6 +181,32 @@ class Database(ABC):
 
         Args:
             date: The date for which to compute prices.
+        """
+        pass
+
+    @abstractmethod
+    async def get_product_prices(
+        self, product_id: int, date: date
+    ) -> list[dict[str, Any]]:
+        """
+        Get computed chain prices across all chains for a specific product
+        on a given date. If there are no prices for the product on that date,
+        return the latest available prices.
+
+        Shape of the returned dictionaries is:
+        {
+            "chain_id": int,
+            "min_price": Decimal,
+            "max_price": Decimal,
+            "avg_price": Decimal
+        }
+
+        Args:
+            product_id: The ID of the product to search for.
+            date: The date for which to fetch prices.
+
+        Returns:
+            Information for the specified product and date.
         """
         pass
 

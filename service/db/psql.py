@@ -12,7 +12,7 @@ import logging
 import os
 from datetime import date
 from .base import Database
-from .models import Chain, Store, ChainProduct, Price
+from .models import Chain, Store, ChainProduct, Price, Product
 
 
 class PostgresDatabase(Database):
@@ -108,6 +108,11 @@ class PostgresDatabase(Database):
                 raise RuntimeError(f"Failed to insert chain {chain.code}")
             return chain_id
 
+    async def list_chains(self) -> list[Chain]:
+        async with self._get_conn() as conn:
+            rows = await conn.fetch("SELECT id, code FROM chains")
+            return [Chain(**row) for row in rows]  # type: ignore
+
     async def add_store(self, store: Store) -> int:
         return await self._fetchval(
             """
@@ -128,6 +133,20 @@ class PostgresDatabase(Database):
             store.zipcode or None,
         )
 
+    async def list_stores(self, chain_code: str) -> list[Store]:
+        async with self._get_conn() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT s.chain_id, s.code, s.type, s.address, s.city, s.zipcode
+                FROM stores s
+                JOIN chains c ON s.chain_id = c.id
+                WHERE c.code = $1
+                """,
+                chain_code,
+            )
+
+            return [Store(**row) for row in rows]  # type: ignore
+
     async def add_ean(self, ean: str) -> int:
         """
         Add an empty product with only EAN barcode info.
@@ -142,6 +161,78 @@ class PostgresDatabase(Database):
             "INSERT INTO products (ean) VALUES ($1) RETURNING id",
             ean,
         )
+
+    async def get_product_by_ean(self, ean: str) -> Product | None:
+        """
+        Get product by EAN code.
+
+        Args:
+            ean: The EAN code to search for.
+
+        Returns:
+            A Product object if found, otherwise None.
+        """
+        async with self._get_conn() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, ean, brand, name, quantity, unit
+                FROM products WHERE ean = $1
+                """,
+                ean,
+            )
+            if row:
+                return Product(**row)  # type: ignore
+            return None
+
+    async def get_chain_products_for_product(
+        self,
+        product_id: int,
+    ) -> list[ChainProduct]:
+        """
+        Get all chain products for a specific product ID.
+
+        Args:
+            product_id: The ID of the product to search for.
+
+        Returns:
+            A list of ChainProduct objects associated with the product.
+        """
+        async with self._get_conn() as conn:
+            rows = await conn.fetch(
+                """
+                SELECT
+                    chain_id, product_id, code, name, brand, category, unit, quantity
+                FROM chain_products
+                WHERE product_id = $1
+                """,
+                product_id,
+            )
+            return [ChainProduct(**row) for row in rows]  # type: ignore
+
+    async def get_product_prices(
+        self, product_id: int, date: date
+    ) -> list[dict[str, Any]]:
+        async with self._get_conn() as conn:
+            return await conn.fetch(
+                """
+                SELECT
+                    cpr.chain_id,
+                    cp.min_price,
+                    cp.max_price,
+                    cp.avg_price
+                FROM chain_prices cp
+                JOIN chain_products cpr ON cp.chain_product_id = cpr.id
+                WHERE cpr.product_id = $1
+                AND cp.price_date = (
+                    SELECT MAX(cp2.price_date)
+                    FROM chain_prices cp2
+                    WHERE cp2.chain_product_id = cp.chain_product_id
+                    AND cp2.price_date <= $2
+                )
+                """,
+                product_id,
+                date,
+            )
 
     async def add_many_prices(self, prices: list[Price]) -> int:
         async with self._atomic() as conn:
