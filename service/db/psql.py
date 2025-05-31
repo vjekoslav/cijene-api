@@ -82,16 +82,15 @@ class PostgresDatabase(DatabaseInterface):
             rows = await conn.fetch("SELECT id, ean FROM products")
             return {row["ean"]: row["id"] for row in rows}
 
-    async def get_chain_products(self, chain_id: int) -> dict[str, int]:
+    async def get_chain_product_map(self, chain_id: int) -> dict[str, int]:
         async with self._get_conn() as conn:
             rows = await conn.fetch(
                 """
-                SELECT code, product_id FROM chain_products
-                WHERE chain_id = $1
+                SELECT code, id FROM chain_products WHERE chain_id = $1
                 """,
                 chain_id,
             )
-            return {row["code"]: row["product_id"] for row in rows}
+            return {row["code"]: row["id"] for row in rows}
 
     async def add_chain(self, chain: Chain) -> int:
         async with self._atomic() as conn:
@@ -206,13 +205,13 @@ class PostgresDatabase(DatabaseInterface):
                 """
                 CREATE TEMP TABLE temp_chain_products (
                     chain_id INTEGER,
+                    product_id INTEGER,
                     code VARCHAR(100),
                     name VARCHAR(255),
                     brand VARCHAR(255),
                     category VARCHAR(255),
                     unit VARCHAR(50),
-                    quantity VARCHAR(50),
-                    product_id INTEGER
+                    quantity VARCHAR(50)
                 )
                 """
             )
@@ -221,13 +220,13 @@ class PostgresDatabase(DatabaseInterface):
                 records=(
                     (
                         cp.chain_id,
+                        cp.product_id,
                         cp.code,
                         cp.name,
                         cp.brand,
                         cp.category,
                         cp.unit,
                         cp.quantity,
-                        cp.product_id,
                     )
                     for cp in chain_products
                 ),
@@ -237,16 +236,16 @@ class PostgresDatabase(DatabaseInterface):
                 """
                 INSERT INTO chain_products(
                     chain_id,
+                    product_id,
                     code,
                     name,
                     brand,
                     category,
                     unit,
-                    quantity,
-                    product_id
+                    quantity
                 )
                 SELECT * from temp_chain_products
-                ON CONFLICT (chain_id, code) DO NOTHING
+                ON CONFLICT DO NOTHING
                 """
             )
             await conn.execute("DROP TABLE temp_chain_products")

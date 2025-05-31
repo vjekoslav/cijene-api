@@ -62,9 +62,9 @@ class DatabaseInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_chain_products(self, chain_id: int) -> dict[str, int]:
+    async def get_chain_product_map(self, chain_id: int) -> dict[str, int]:
         """
-        Get chain product codes and IDs.
+        Get a mapping from chain product codes to database IDs.
 
         Args:
             chain_id: The ID of the chain to fetch products for.

@@ -55,7 +55,7 @@ async def process_stores(stores_path: Path, chain_id: int) -> dict[str, int]:
     logger.debug(f"Importing stores from {stores_path}")
 
     stores_data = await read_csv(stores_path)
-    store_ids = {}
+    store_map = {}
 
     for store_row in stores_data:
         store = Store(
@@ -68,10 +68,10 @@ async def process_stores(stores_path: Path, chain_id: int) -> dict[str, int]:
         )
 
         store_id = await db.add_store(store)
-        store_ids[store.code] = store_id
+        store_map[store.code] = store_id
 
     logger.debug(f"Processed {len(stores_data)} stores")
-    return store_ids
+    return store_map
 
 
 async def process_products(
@@ -96,7 +96,7 @@ async def process_products(
     logger.debug(f"Processing products from {products_path}")
 
     products_data = await read_csv(products_path)
-    chain_product_map = await db.get_chain_products(chain_id)
+    chain_product_map = await db.get_chain_product_map(chain_id)
 
     new_products = [
         p for p in products_data if p["product_id"] not in chain_product_map
@@ -147,7 +147,7 @@ async def process_products(
         )
     logger.debug(f"Imported {len(new_products)} new chain products")
 
-    chain_product_map = await db.get_chain_products(chain_id)
+    chain_product_map = await db.get_chain_product_map(chain_id)
     return chain_product_map
 
 
