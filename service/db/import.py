@@ -228,7 +228,7 @@ async def process_prices(
                 store_id=store_id,
                 price_date=price_date,
                 regular_price=Decimal(price_row["price"]),
-                special_price=clean_price(price_row["special_price"]),
+                special_price=clean_price(price_row.get("special_price") or ""),
                 unit_price=clean_price(price_row["unit_price"]),
                 best_price_30=clean_price(price_row["best_price_30"]),
                 anchor_price=clean_price(price_row["anchor_price"]),
