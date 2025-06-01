@@ -15,6 +15,7 @@ from .base import Database
 from .models import (
     Chain,
     ChainWithId,
+    Product,
     ProductWithId,
     Store,
     ChainProduct,
@@ -182,6 +183,37 @@ class PostgresDatabase(Database):
                 ean,
             )
             return [ProductWithId(**row) for row in rows]  # type: ignore
+
+    async def update_product(self, product: Product) -> bool:
+        """
+        Update product information by EAN code.
+
+        Args:
+            product: Product object containing the EAN and fields to update.
+                    Only non-None fields will be updated in the database.
+
+        Returns:
+            True if the product was updated, False if not found.
+        """
+        async with self._get_conn() as conn:
+            result = await conn.execute(
+                """
+                UPDATE products
+                SET
+                    brand = COALESCE($2, products.brand),
+                    name = COALESCE($3, products.name),
+                    quantity = COALESCE($4, products.quantity),
+                    unit = COALESCE($5, products.unit)
+                WHERE ean = $1
+                """,
+                product.ean,
+                product.brand,
+                product.name,
+                product.quantity,
+                product.unit,
+            )
+            _, rowcount = result.split(" ")
+            return int(rowcount) == 1
 
     async def get_chain_products_for_product(
         self,

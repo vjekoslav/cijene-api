@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from .models import (
     Chain,
     ChainWithId,
+    Product,
     ProductWithId,
     Store,
     ChainProduct,
@@ -127,6 +128,20 @@ class Database(ABC):
 
         Returns:
             A list of Product objects matching the EAN codes.
+        """
+        pass
+
+    @abstractmethod
+    async def update_product(self, product: "Product") -> bool:
+        """
+        Update product information by EAN code.
+
+        Args:
+            product: Product object containing the EAN and fields to update.
+                    Only non-None fields will be updated in the database.
+
+        Returns:
+            True if the product was updated, False if not found.
         """
         pass
 

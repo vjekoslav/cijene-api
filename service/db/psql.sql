@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS products (
     brand VARCHAR(255),
     name VARCHAR(255),
     quantity DECIMAL(10, 3),
-    unit VARCHAR(10) CHECK (unit IN ('L', 'kg', 'kom')),
+    unit VARCHAR(10) CHECK (unit IN ('L', 'kg', 'm', 'kom')),
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 

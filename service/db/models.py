@@ -45,6 +45,9 @@ class Product:
     quantity: Optional[Decimal] = None
     unit: Optional[str] = None
 
+    def to_dict(self):
+        return {f.name: getattr(self, f.name) for f in fields(self)}
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ProductWithId(Product):
