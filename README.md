@@ -30,12 +30,11 @@ Trenutno podržani trgovački lanci:
 Softver je izgrađen na Pythonu a sastoji se od dva dijela:
 
 * Crawler - preuzima podatke s web stranica trgovačkih lanaca (`crawler`)
-* Web servis - API koji omogućava pristup podacima o cijenama proizvoda (`service`) - **U IZRADI**
+* Web servis - API koji omogućava pristup podacima o cijenama proizvoda (`service`)
 
 ## Instalacija
 
-Za instalaciju crawlera potrebno je imati instaliran Python 3.13 ili noviji. Preporučamo
-korištenje `uv` za setup projekta:
+Za instalaciju crawlera potrebno je imati instaliran Python 3.13 ili noviji. Preporučamo korištenje `uv` za setup projekta:
 
 ```bash
 git clone https://github.com/senko/cijene-api.git
@@ -69,6 +68,8 @@ odabir datuma (default: trenutni dan), `-c` za odabir lanaca (default: svi) te
 
 ### Web servis
 
+Web servis koristi PostgreSQL bazu podataka za pohranu podataka o cijenama.
+
 Prije pokretanja servisa, kreirajte datoteku `.env` sa konfiguracijskim varijablama.
 Primjer datoteke sa zadanim (default) vrijednostima može se naći u `.env.example`.
 
@@ -81,6 +82,39 @@ uv run -m service.main
 Servis će biti dostupan na `http://localhost:8000` (ako niste mijenjali port), a na
 `http://localhost:8000/docs` je dostupna Swagger dokumentacija API-ja.
 
+#### Uvoz podataka
+
+Servis drži podatke u PostgreSQL bazi podataka. Za uvoz podataka iz CSV
+datoteka koje kreira crawler, možete koristiti sljedeću komandu:
+
+```bash
+uv run -m servide.db.import /path/to/csv-folder/
+```
+
+CSV folder treba biti imenovan u `YYYY-MM-DD` formatu, gdje `YYYY-MM-DD`
+predstavlja datum za koji se podaci uvoze, i sadržavati CSV datoteke u
+istom formatu kakve generira crawler (*ne* CSV datoteke skinute sa stranica
+nekog trgovačkog lanca!).
+
+## Dodatni podaci o proizvodima
+
+Dodatni pročišćeni podaci o proizvodima (naziv, marka, količina, jedinica mjere)
+za najčeših ~30 tisuća proizvoda dostupni su u `enrichment/products.csv` datoteci
+a mogu se uvesti u bazu koristeći sljedeću komandu:
+
+```bash
+uv run -m service.db.enrich nrichment/products.csv
+```
+
+#### Kreiranje korisnika
+
+Neki API endpointovi zahtijevaju autentifikaciju. Korisnike možete kreirati
+direktno u bazi podataka koristeći SQL, npr:
+
+```sql
+INSERT INTO users (name, api_key, is_active) VALUES ('Senko', 'secret-key', TRUE);
+```
+
 ## Licenca
 
 Ovaj projekt je licenciran pod [AGPL-3 licencom](LICENSE).
@@ -88,3 +122,7 @@ Ovaj projekt je licenciran pod [AGPL-3 licencom](LICENSE).
 Podaci prikupljeni putem ovog projekta su javni i dostupni svima, temeljem
 Odluke o objavi cjenika i isticanju dodatne cijene kao mjeri izravne
 kontrole cijena u trgovini na malo, NN 75/2025 od 2.5.2025.
+
+Pročišćeni CSV podaci o proizvodima
+([`enrichment/products.csv`](enrichment/products.csv))
+dostupni su pod [CC BY-NC-SA licencom](https://creativecommons.org/licenses/by-nc-sa/4.0/).
