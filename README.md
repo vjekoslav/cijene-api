@@ -88,7 +88,7 @@ Servis drži podatke u PostgreSQL bazi podataka. Za uvoz podataka iz CSV
 datoteka koje kreira crawler, možete koristiti sljedeću komandu:
 
 ```bash
-uv run -m servide.db.import /path/to/csv-folder/
+uv run -m service.db.import /path/to/csv-folder/
 ```
 
 CSV folder treba biti imenovan u `YYYY-MM-DD` formatu, gdje `YYYY-MM-DD`
@@ -103,7 +103,7 @@ za najčeših ~30 tisuća proizvoda dostupni su u `enrichment/products.csv` dato
 a mogu se uvesti u bazu koristeći sljedeću komandu:
 
 ```bash
-uv run -m service.db.enrich nrichment/products.csv
+uv run -m service.db.enrich enrichment/products.csv
 ```
 
 #### Kreiranje korisnika
