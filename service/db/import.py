@@ -5,7 +5,7 @@ import asyncio
 import argparse
 from datetime import datetime, date
 from pathlib import Path
-from typing import List, Dict
+from typing import Any, List, Dict
 from csv import DictReader
 from time import time
 
@@ -72,6 +72,7 @@ async def process_stores(stores_path: Path, chain_id: int) -> dict[str, int]:
 async def process_products(
     products_path: Path,
     chain_id: int,
+    chain_code: str,
     barcodes: dict[str, int],
 ) -> Dict[str, int]:
     """
@@ -83,6 +84,7 @@ async def process_products(
     Args:
         products_path: Path to the products CSV file.
         chain_id: ID of the chain to which these products belong.
+        chain_code: Code of the retail chain.
         barcodes: Dictionary mapping EAN codes to global product IDs.
 
     Returns:
@@ -93,9 +95,32 @@ async def process_products(
     products_data = await read_csv(products_path)
     chain_product_map = await db.get_chain_product_map(chain_id)
 
+    # Ideally the CSV would already have valid barcodes, but some older
+    # archives contain invalid ones so we need to clean them up.
+    def clean_barcode(data: dict[str, Any]) -> dict:
+        barcode = data.get("barcode", "").strip()
+
+        if ":" in barcode:
+            return data
+
+        if len(barcode) >= 8 and barcode.isdigit():
+            return data
+
+        product_id = data.get("product_id", "")
+        if not product_id:
+            logger.warning(f"Product has no barcode: {data}")
+            return data
+
+        # Construct a chain-specific barcode
+        data["barcode"] = f"{chain_code}:{product_id}"
+        return data
+
     new_products = [
-        p for p in products_data if p["product_id"] not in chain_product_map
+        clean_barcode(p)
+        for p in products_data
+        if p["product_id"] not in chain_product_map
     ]
+
     if not new_products:
         return chain_product_map
 
@@ -175,26 +200,38 @@ async def process_prices(
 
     logger.debug(f"Found {len(prices_data)} price entries, preparing to import")
 
+    def clean_price(value: str) -> Decimal | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if value == "":
+            return None
+        dval = Decimal(value)
+        if dval == 0:
+            return None
+        return dval
+
     for price_row in prices_data:
         store_id = store_map[price_row["store_id"]]
-        product_id = chain_product_map[price_row["product_id"]]
-
-        regular_price = price_row["price"]
-        special_price = price_row["special_price"] or None
-        unit_price = price_row["unit_price"] or None
-        best_price_30 = price_row["best_price_30"] or None
-        anchor_price = price_row["anchor_price"] or None
+        product_id = chain_product_map.get(price_row["product_id"])
+        if product_id is None:
+            # Price for a product that wasn't added, perhaps because the
+            # barcode is invalid
+            logger.warning(
+                f"Skipping price for unknown product {price_row['product_id']}"
+            )
+            continue
 
         prices_to_create.append(
             Price(
                 chain_product_id=product_id,
                 store_id=store_id,
                 price_date=price_date,
-                regular_price=Decimal(regular_price),
-                special_price=None if special_price is None else Decimal(special_price),
-                unit_price=None if unit_price is None else Decimal(unit_price),
-                best_price_30=None if best_price_30 is None else Decimal(best_price_30),
-                anchor_price=None if anchor_price is None else Decimal(anchor_price),
+                regular_price=Decimal(price_row["price"]),
+                special_price=clean_price(price_row["special_price"]),
+                unit_price=clean_price(price_row["unit_price"]),
+                best_price_30=clean_price(price_row["best_price_30"]),
+                anchor_price=clean_price(price_row["anchor_price"]),
             )
         )
 
@@ -246,7 +283,7 @@ async def process_chain(
     chain_id = await db.add_chain(chain)
 
     store_map = await process_stores(stores_path, chain_id)
-    chain_product_map = await process_products(products_path, chain_id, barcodes)
+    chain_product_map = await process_products(products_path, chain_id, code, barcodes)
 
     n_new_prices = await process_prices(
         price_date,
