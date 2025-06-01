@@ -129,7 +129,6 @@ async def prepare_product_response(
         product_ids,
         [chain.id for chain in chains],
     )
-    prices = await db.get_product_prices(product_ids, date)
 
     product_response_map = {
         product.id: ProductResponse(
