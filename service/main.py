@@ -55,13 +55,13 @@ async def custom_404_handler(request: Request, exc: HTTPException):
     )
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
     """Root endpoint redirects to main website."""
     return RedirectResponse(url=settings.redirect_url, status_code=302)
 
 
-@app.get("/health")
+@app.get("/health", tags=["Service status"])
 async def health_check():
     """Health check endpoint."""
     return {"status": "healthy"}

@@ -7,7 +7,7 @@ from service.config import settings
 from service.db.models import ProductWithId
 from service.routers.auth import RequireAuth
 
-router = APIRouter(dependencies=[RequireAuth])
+router = APIRouter(tags=["Products, Chains and Stores"], dependencies=[RequireAuth])
 db = settings.get_db()
 
 
@@ -17,7 +17,7 @@ class ListChainsResponse(BaseModel):
     chains: list[str] = Field(..., description="List of retail chain codes.")
 
 
-@router.get("/chains/")
+@router.get("/chains/", summary="List retail chains")
 async def list_chains() -> ListChainsResponse:
     """List all available chains."""
     chains = await db.list_chains()
@@ -46,12 +46,15 @@ class ListStoresResponse(BaseModel):
     )
 
 
-@router.get("/{chain_code}/stores/")
+@router.get(
+    "/{chain_code}/stores/",
+    summary="List retail chain stores",
+)
 async def list_stores(chain_code: str) -> ListStoresResponse:
     """
-    List all stores for a particular chain.
+    List all stores (locations) for a particular chain.
 
-    TODO: Allow filtering by store type and location.
+    Future plan: Allow filtering by store type and location.
     """
     stores = await db.list_stores(chain_code)
 
@@ -180,7 +183,7 @@ async def prepare_product_response(
     return [p for p in product_response_map.values() if p.chains]
 
 
-@router.get("/products/{ean}/")
+@router.get("/products/{ean}/", summary="Get product data/prices by barcode")
 async def get_product(
     ean: str,
     date: datetime.date = Query(
@@ -193,7 +196,9 @@ async def get_product(
     ),
 ) -> ProductResponse:
     """
-    Get product information including chain products and prices by EAN.
+    Get product information including chain products and prices by their
+    barcode. For products that don't have official EAN codes and use
+    chain-specific codes, use the "chain:<product_code>" format.
 
     The price information is for the last known date earlier than or
     equal to the specified date. If no date is provided, current date is used.
@@ -224,7 +229,7 @@ async def get_product(
     return product_responses[0]
 
 
-@router.get("/products/")
+@router.get("/products/", summary="Search for products by name")
 async def search_products(
     q: str = Query(..., description="Search query for product names"),
     date: datetime.date = Query(
