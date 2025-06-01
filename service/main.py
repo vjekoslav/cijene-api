@@ -1,9 +1,11 @@
+from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.exceptions import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-from contextlib import asynccontextmanager
 
 from service.routers import v0, v1
 from service.config import settings
@@ -25,6 +27,9 @@ app = FastAPI(
     version=settings.version,
     debug=settings.debug,
     lifespan=lifespan,
+    openapi_components={
+        "securitySchemes": {"HTTPBearer": {"type": "http", "scheme": "bearer"}}
+    },
 )
 
 # Add CORS middleware to allow all origins
@@ -62,10 +67,16 @@ async def health_check():
     return {"status": "healthy"}
 
 
-if __name__ == "__main__":
+def main():
+    log_level = logging.DEBUG if settings.debug else logging.INFO
+    logging.basicConfig(level=log_level)
     uvicorn.run(
         "service.main:app",
         host=settings.host,
         port=settings.port,
-        reload=settings.debug,
+        log_level=log_level,
     )
+
+
+if __name__ == "__main__":
+    main()

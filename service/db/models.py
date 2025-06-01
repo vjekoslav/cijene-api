@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from dataclasses import dataclass, fields
@@ -7,9 +7,11 @@ from dataclasses import dataclass, fields
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class User:
+    id: int
     name: str
     api_key: str
-    is_active: bool = True
+    is_active: bool
+    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

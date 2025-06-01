@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import date
-from typing import Dict, Any, Optional
+from typing import Any
 
 from .models import (
     Chain,
@@ -12,6 +12,7 @@ from .models import (
     Price,
     StoreWithId,
     ChainProductWithId,
+    User,
 )
 
 
@@ -254,7 +255,7 @@ class Database(ABC):
         pass
 
     @abstractmethod
-    async def get_user_by_api_key(self, api_key: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_api_key(self, api_key: str) -> User | None:
         """
         Get active user by API key.
 
@@ -262,7 +263,7 @@ class Database(ABC):
             api_key: The API key to search for.
 
         Returns:
-            A dictionary with user information if found, otherwise None.
+            User object if found and active, None otherwise.
         """
         pass
 

@@ -4,9 +4,7 @@ from typing import (
     AsyncGenerator,
     AsyncIterator,
     List,
-    Dict,
     Any,
-    Optional,
 )
 import logging
 import os
@@ -22,6 +20,7 @@ from .models import (
     Price,
     StoreWithId,
     ChainProductWithId,
+    User,
 )
 
 
@@ -465,7 +464,7 @@ class PostgresDatabase(Database):
                 date,
             )
 
-    async def get_user_by_api_key(self, api_key: str) -> Optional[Dict[str, Any]]:
+    async def get_user_by_api_key(self, api_key: str) -> User | None:
         async with self._get_conn() as conn:
             row = await conn.fetchrow(
                 """
@@ -479,5 +478,5 @@ class PostgresDatabase(Database):
             )
 
             if row:
-                return dict(row)
+                return User(**row)  # type: ignore
             return None

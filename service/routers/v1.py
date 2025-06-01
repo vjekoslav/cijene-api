@@ -5,8 +5,9 @@ import datetime
 
 from service.config import settings
 from service.db.models import ProductWithId
+from service.routers.auth import RequireAuth
 
-router = APIRouter()
+router = APIRouter(dependencies=[RequireAuth])
 db = settings.get_db()
 
 
