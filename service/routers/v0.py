@@ -6,7 +6,7 @@ from fastapi import APIRouter
 
 from service.config import settings
 
-router = APIRouter()
+router = APIRouter(tags=["ZIP archives"])
 
 
 def format_datetime_with_timezone(dt: datetime) -> str:
@@ -55,9 +55,26 @@ def find_archives() -> list[tuple[str, int, datetime]]:
     return archives
 
 
-@router.get("/list")
+@router.get("/list", summary="List available ZIP archives")
 async def list_archives() -> Dict[str, List[Dict[str, Any]]]:
-    """List all available archive files with their metadata."""
+    """
+    List all available archive files with their metadata.
+
+    Response format:
+    ```json
+    {
+        "archives": [
+            {
+                "date": "YYYY-MM-DD",
+                "url": "https://api.cijene.dev/v0/archive/YYYY-MM-DD.zip",
+                "size": 123456,
+                "updated": "YYYY-MM-DDTHH:MM:SS+00:00"
+            },
+            ...
+        ]
+    }
+    ```
+    """
 
     archives = []
     for date, size, mtime in find_archives():

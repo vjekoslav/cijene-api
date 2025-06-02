@@ -5,6 +5,7 @@ description = "Service for product pricing data by Croatian grocery chains."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "asyncpg>=0.30.0",
     "beautifulsoup4>=4.13.4",
     "fastapi[standard]>=0.115.12",
     "httpx>=0.28.1",
