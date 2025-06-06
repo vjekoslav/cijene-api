@@ -200,7 +200,7 @@ class KauflandCrawler(BaseCrawler):
             List of Product objects
         """
         try:
-            content = self.fetch_text(csv_url, encodings=["windows-1250"])
+            content = self.fetch_text(csv_url, encodings=["windows-1250", "utf-8"])
             return self.parse_csv(content, delimiter="\t")
         except Exception as e:
             logger.error(
