@@ -4,6 +4,7 @@ from typing import Any
 
 from .models import (
     Chain,
+    ChainStats,
     ChainWithId,
     Product,
     ProductWithId,
@@ -54,6 +55,16 @@ class Database(ABC):
 
         Returns:
             A list of Chain objects representing all chains.
+        """
+        pass
+
+    @abstractmethod
+    async def list_latest_chain_stats(self) -> list[ChainStats]:
+        """
+        Returns the latest available chain stats for each chain.
+
+        Returns:
+            A list of ChainStats objects.
         """
         pass
 
