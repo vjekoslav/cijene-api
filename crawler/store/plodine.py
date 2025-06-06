@@ -23,6 +23,7 @@ class PlodineCrawler(BaseCrawler):
     BASE_URL = "https://www.plodine.hr"
     INDEX_URL = f"{BASE_URL}/info-o-cijenama"
     ZIP_DATE_PATTERN = re.compile(r".*/cjenici/cjenici_(\d{2})_(\d{2})_(\d{4})_.*\.zip")
+    VERIFY_TLS_CERT = False  # Plodine uses a root CA unsupported by httpx on Debian 12
 
     PRICE_MAP = {
         "price": ("Maloprodajna cijena", False),

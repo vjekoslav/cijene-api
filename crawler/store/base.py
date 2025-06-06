@@ -27,6 +27,8 @@ class BaseCrawler:
 
     TIMEOUT = 30.0
     USER_AGENT = None
+    VERIFY_TLS_CERT = True
+    MAX_RETRIES = 3
 
     ZIP_DATE_PATTERN: Pattern | None = None
 
@@ -37,7 +39,11 @@ class BaseCrawler:
     """Mapping from CSV column names to non-price fields and whether they are required."""
 
     def __init__(self):
-        self.client = httpx.Client(timeout=30.0, follow_redirects=True)
+        self.client = httpx.Client(
+            timeout=30.0,
+            follow_redirects=True,
+            verify=self.VERIFY_TLS_CERT,
+        )
 
     def fetch_text(
         self,
