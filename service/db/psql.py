@@ -133,7 +133,7 @@ class PostgresDatabase(Database):
                     cs.store_count,
                     cs.created_at
                 FROM chain_stats cs
-                JOIN chains c ON c.id = cs.id
+                JOIN chains c ON c.id = cs.chain_id
                 ORDER BY c.code, cs.price_date DESC;
             """)
             return [ChainStats(**row) for row in rows]  # type: ignore
