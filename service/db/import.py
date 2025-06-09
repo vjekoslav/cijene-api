@@ -306,7 +306,7 @@ async def import_archive(path: Path):
         logger.error(f"`{path.stem}` is not a valid date in YYYY-MM-DD format")
         return
 
-    with TemporaryDirectory() as temp_dir:
+    with TemporaryDirectory() as temp_dir:  # type: ignore
         logger.debug(f"Extracting archive to {temp_dir}")
         with zipfile.ZipFile(path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
