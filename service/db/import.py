@@ -399,7 +399,7 @@ async def main():
         for path in args.paths:
             if path.is_dir():
                 await import_directory(path)
-            elif path.suffix == ".zip":
+            elif path.suffix.lower() == ".zip":
                 await import_archive(path)
             else:
                 logger.error(f"Path `{path}` is neither a directory nor a zip archive.")
