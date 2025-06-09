@@ -330,6 +330,9 @@ async def import_directory(path: Path) -> None:
 
         logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
         await db.compute_chain_prices(price_date)
+
+        logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
+        await db.compute_chain_stats(price_date)
     finally:
         await db.close()
 

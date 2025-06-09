@@ -12,6 +12,7 @@ from datetime import date
 from .base import Database
 from .models import (
     Chain,
+    ChainStats,
     ChainWithId,
     Product,
     ProductWithId,
@@ -121,6 +122,21 @@ class PostgresDatabase(Database):
         async with self._get_conn() as conn:
             rows = await conn.fetch("SELECT id, code FROM chains")
             return [ChainWithId(**row) for row in rows]  # type: ignore
+
+    async def list_latest_chain_stats(self) -> list[ChainStats]:
+        async with self._get_conn() as conn:
+            rows = await conn.fetch("""
+                SELECT DISTINCT ON (c.code)
+                    c.code AS chain_code,
+                    cs.price_date,
+                    cs.price_count,
+                    cs.store_count,
+                    cs.created_at
+                FROM chain_stats cs
+                JOIN chains c ON c.id = cs.chain_id
+                ORDER BY c.code, cs.price_date DESC;
+            """)
+            return [ChainStats(**row) for row in rows]  # type: ignore
 
     async def add_store(self, store: Store) -> int:
         return await self._fetchval(
@@ -460,6 +476,33 @@ class PostgresDatabase(Database):
                     max_price = EXCLUDED.max_price,
                     avg_price = EXCLUDED.avg_price;
 
+                """,
+                date,
+            )
+
+    async def compute_chain_stats(self, date: date) -> None:
+        async with self._get_conn() as conn:
+            await conn.execute(
+                """
+                INSERT INTO chain_stats(
+                    chain_id,
+                    price_date,
+                    price_count,
+                    store_count
+                )
+                SELECT
+                    cp.chain_id,
+                    $1 as price_date,
+                    COUNT(*) AS price_count,
+                    COUNT(DISTINCT p.store_id) AS store_count
+                FROM prices p
+                JOIN chain_products cp ON cp.id = p.chain_product_id
+                WHERE p.price_date = $1
+                GROUP BY cp.chain_id
+                ON CONFLICT (chain_id, price_date)
+                DO UPDATE SET
+                    price_count = EXCLUDED.price_count,
+                    store_count = EXCLUDED.store_count;
                 """,
                 date,
             )
