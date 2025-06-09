@@ -340,22 +340,15 @@ async def _import(path: Path, price_date: datetime) -> None:
 
     t0 = time()
 
-    await db.connect()
+    barcodes = await db.get_product_barcodes()
+    for chain_dir in chain_dirs:
+        await process_chain(price_date, chain_dir, barcodes)
 
-    try:
-        await db.create_tables()
+    logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
+    await db.compute_chain_prices(price_date)
 
-        barcodes = await db.get_product_barcodes()
-        for chain_dir in chain_dirs:
-            await process_chain(price_date, chain_dir, barcodes)
-
-        logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
-        await db.compute_chain_prices(price_date)
-
-        logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
-        await db.compute_chain_stats(price_date)
-    finally:
-        await db.close()
+    logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
+    await db.compute_chain_stats(price_date)
 
     t1 = time()
     dt = int(t1 - t0)
@@ -398,13 +391,20 @@ async def main():
         format="%(asctime)s:%(name)s:%(levelname)s:%(message)s",
     )
 
-    for path in args.paths:
-        if path.is_dir():
-            await import_directory(path)
-        elif path.suffix == ".zip":
-            await import_archive(path)
-        else:
-            logger.error(f"Path `{path}` is neither a directory nor a zip archive.")
+    await db.connect()
+
+    try:
+        await db.create_tables()
+
+        for path in args.paths:
+            if path.is_dir():
+                await import_directory(path)
+            elif path.suffix == ".zip":
+                await import_archive(path)
+            else:
+                logger.error(f"Path `{path}` is neither a directory nor a zip archive.")
+    finally:
+        await db.close()
 
 
 if __name__ == "__main__":
