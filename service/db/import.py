@@ -355,7 +355,12 @@ async def main():
     `service/config.py` for details.
     """
     parser = argparse.ArgumentParser(description=main.__doc__)
-    parser.add_argument("dir", type=Path, help="Directory containing price data")
+    parser.add_argument(
+        "dirs",
+        type=Path,
+        help="One or more directories containing price data",
+        nargs="+",
+    )
     parser.add_argument(
         "-d",
         "--debug",
@@ -369,7 +374,8 @@ async def main():
         format="%(asctime)s:%(name)s:%(levelname)s:%(message)s",
     )
 
-    await import_directory(args.dir)
+    for directory in args.dirs:
+        await import_directory(directory)
 
 
 if __name__ == "__main__":
