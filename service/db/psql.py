@@ -126,15 +126,20 @@ class PostgresDatabase(Database):
     async def list_latest_chain_stats(self) -> list[ChainStats]:
         async with self._get_conn() as conn:
             rows = await conn.fetch("""
-                SELECT DISTINCT ON (c.code)
+                SELECT
                     c.code AS chain_code,
                     cs.price_date,
                     cs.price_count,
                     cs.store_count,
                     cs.created_at
-                FROM chain_stats cs
-                JOIN chains c ON c.id = cs.chain_id
-                ORDER BY c.code, cs.price_date DESC;
+                FROM chains c
+                JOIN LATERAL (
+                    SELECT *
+                    FROM chain_stats
+                    WHERE chain_id = c.id
+                    ORDER BY price_date DESC
+                    LIMIT 1
+                ) cs ON true;
             """)
             return [ChainStats(**row) for row in rows]  # type: ignore
 
