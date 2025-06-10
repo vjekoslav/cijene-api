@@ -50,7 +50,7 @@ class PostgresDatabase(Database):
         )
 
     @asynccontextmanager
-    async def _get_conn(self) -> AsyncGenerator[Any, asyncpg.Connection]:
+    async def _get_conn(self) -> AsyncGenerator[asyncpg.Connection]:
         """Context manager to acquire a connection from the pool."""
         if not self.pool:
             raise RuntimeError("Database pool is not initialized")
