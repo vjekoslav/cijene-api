@@ -50,7 +50,7 @@ class PostgresDatabase(Database):
         )
 
     @asynccontextmanager
-    async def _get_conn(self) -> AsyncGenerator[Any, asyncpg.Connection]:
+    async def _get_conn(self) -> AsyncGenerator[asyncpg.Connection]:
         """Context manager to acquire a connection from the pool."""
         if not self.pool:
             raise RuntimeError("Database pool is not initialized")
@@ -486,31 +486,38 @@ class PostgresDatabase(Database):
             )
 
     async def compute_chain_stats(self, date: date) -> None:
-        async with self._get_conn() as conn:
-            await conn.execute(
+        async with self._atomic() as conn:
+            # Not doing insert in the same query because that caused deadlocks
+            # for reasons which I don't understand.
+            stats = await conn.fetch(
                 """
-                INSERT INTO chain_stats(
-                    chain_id,
-                    price_date,
-                    price_count,
-                    store_count
-                )
                 SELECT
                     cp.chain_id,
-                    $1 as price_date,
                     COUNT(*) AS price_count,
                     COUNT(DISTINCT p.store_id) AS store_count
                 FROM prices p
                 JOIN chain_products cp ON cp.id = p.chain_product_id
                 WHERE p.price_date = $1
                 GROUP BY cp.chain_id
-                ON CONFLICT (chain_id, price_date)
-                DO UPDATE SET
-                    price_count = EXCLUDED.price_count,
-                    store_count = EXCLUDED.store_count;
                 """,
                 date,
             )
+
+            for record in stats:
+                await conn.execute(
+                    """
+                    INSERT INTO chain_stats(chain_id, price_date, price_count, store_count)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (chain_id, price_date)
+                    DO UPDATE SET
+                        price_count = EXCLUDED.price_count,
+                        store_count = EXCLUDED.store_count;
+                    """,
+                    record["chain_id"],
+                    date,
+                    record["price_count"],
+                    record["store_count"],
+                )
 
     async def get_user_by_api_key(self, api_key: str) -> User | None:
         async with self._get_conn() as conn:
