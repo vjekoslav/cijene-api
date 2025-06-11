@@ -307,7 +307,7 @@ async def import_archive(path: Path):
         return
 
     with TemporaryDirectory() as temp_dir:  # type: ignore
-        logger.debug(f"Extracting archive to {temp_dir}")
+        logger.debug(f"Extracting archive {path} to {temp_dir}")
         with zipfile.ZipFile(path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
         await _import(Path(temp_dir), price_date)
@@ -371,7 +371,10 @@ async def main():
     Database connection settings are loaded from the service configuration, see
     `service/config.py` for details.
     """
-    parser = argparse.ArgumentParser(description=main.__doc__)
+    parser = argparse.ArgumentParser(
+        description=main.__doc__,
+        formatter_class=argparse.RawTextHelpFormatter,
+    )
     parser.add_argument(
         "paths",
         type=Path,
