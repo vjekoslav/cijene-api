@@ -88,7 +88,8 @@ class RotoCrawler(BaseCrawler):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     crawler = RotoCrawler()
-    stores = crawler.get_all_products(datetime.date(2025, 6, 10))
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
+    stores = crawler.get_all_products(yesterday)
     from pprint import pp
 
     pp(stores[0])
