@@ -36,6 +36,9 @@ class StoreResponse(BaseModel):
     address: str | None = Field(..., description="Physical address of the store.")
     city: str | None = Field(..., description="City where the store is located.")
     zipcode: str | None = Field(..., description="Postal code of the store location.")
+    lat: float | None = Field(..., description="Latitude coordinate of the store.")
+    lon: float | None = Field(..., description="Longitude coordinate of the store.")
+    phone: str | None = Field(..., description="Phone number of the store.")
 
 
 class ListStoresResponse(BaseModel):
@@ -70,6 +73,9 @@ async def list_stores(chain_code: str) -> ListStoresResponse:
                 address=store.address,
                 city=store.city,
                 zipcode=store.zipcode,
+                lat=store.lat,
+                lon=store.lon,
+                phone=store.phone,
             )
             for store in stores
         ]

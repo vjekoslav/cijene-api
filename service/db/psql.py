@@ -168,7 +168,8 @@ class PostgresDatabase(Database):
             rows = await conn.fetch(
                 """
                 SELECT
-                    s.id, s.chain_id, s.code, s.type, s.address, s.city, s.zipcode
+                    s.id, s.chain_id, s.code, s.type, s.address, s.city, s.zipcode,
+                    s.lat, s.lon, s.phone
                 FROM stores s
                 JOIN chains c ON s.chain_id = c.id
                 WHERE c.code = $1
