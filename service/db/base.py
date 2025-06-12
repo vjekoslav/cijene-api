@@ -83,6 +83,37 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def update_store(
+        self,
+        chain_id: int,
+        store_code: str,
+        *,
+        address: str | None = None,
+        city: str | None = None,
+        zipcode: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        phone: str | None = None,
+    ) -> bool:
+        """
+        Update store information by chain_id and store code.
+
+        Args:
+            chain_id: The ID of the chain.
+            store_code: The code of the store.
+            address: New address (optional).
+            city: New city (optional).
+            zipcode: New zipcode (optional).
+            lat: New latitude (optional).
+            lon: New longitude (optional).
+            phone: New phone (optional).
+
+        Returns:
+            True if the store was updated, False if not found.
+        """
+        pass
+
+    @abstractmethod
     async def list_stores(self, chain_code: str) -> list[StoreWithId]:
         """
         List all stores for a particular chain.

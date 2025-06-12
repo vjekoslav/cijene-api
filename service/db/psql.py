@@ -163,6 +163,47 @@ class PostgresDatabase(Database):
             store.zipcode or None,
         )
 
+    async def update_store(
+        self,
+        chain_id: int,
+        store_code: str,
+        *,
+        address: str | None = None,
+        city: str | None = None,
+        zipcode: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        phone: str | None = None,
+    ) -> bool:
+        """
+        Update store information by chain_id and store code.
+        Returns True if the store was updated, False if not found.
+        """
+        async with self._get_conn() as conn:
+            result = await conn.execute(
+                """
+                UPDATE stores
+                SET
+                    address = COALESCE($3, stores.address),
+                    city = COALESCE($4, stores.city),
+                    zipcode = COALESCE($5, stores.zipcode),
+                    lat = COALESCE($6, stores.lat),
+                    lon = COALESCE($7, stores.lon),
+                    phone = COALESCE($8, stores.phone)
+                WHERE chain_id = $1 AND code = $2
+                """,
+                chain_id,
+                store_code,
+                address or None,
+                city or None,
+                zipcode or None,
+                lat or None,
+                lon or None,
+                phone or None,
+            )
+            _, rowcount = result.split(" ")
+            return int(rowcount) == 1
+
     async def list_stores(self, chain_code: str) -> list[StoreWithId]:
         async with self._get_conn() as conn:
             rows = await conn.fetch(
