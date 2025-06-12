@@ -71,7 +71,7 @@ class RotoCrawler(BaseCrawler):
             return []
 
     def get_stores_from_url(self, csv_url: str, products: list[Product]):
-        matches = re.findall(r",\s*(D\d+) (\w+),", csv_url)
+        matches = re.findall(r",\s*(D\d+) ([^,]+),", csv_url)
         for store_id, city in matches:
             yield Store(
                 chain=self.CHAIN,
