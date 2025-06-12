@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import datetime
 import logging
 import re
+from typing import NamedTuple
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -41,9 +44,7 @@ class RotoCrawler(BaseCrawler):
         "packaging": ("PAKIRANJE", False),
     }
 
-    def get_csv_url(self, date: datetime.date) -> str:
-        html_content = self.fetch_text(self.INDEX_URL)
-        soup = BeautifulSoup(html_content, "html.parser")
+    def get_csv_url(self, soup: BeautifulSoup, date: datetime.date) -> str:
         anchors = soup.select("a.cjenici-table-row")
         hr_date = date.strftime("%d.%m.%Y")
 
@@ -57,10 +58,14 @@ class RotoCrawler(BaseCrawler):
         raise ValueError(f"No price list found for {date}")
 
     def get_all_products(self, date: datetime.date) -> list[Store]:
-        csv_url = self.get_csv_url(date)
+        html_content = self.fetch_text(self.INDEX_URL)
+        soup = BeautifulSoup(html_content, "html.parser")
+        csv_url = self.get_csv_url(soup, date)
+        addresses = self.parse_store_addresses(soup)
+
         # Roto has the same prices for all stores
         products = self.get_store_products(csv_url)
-        return list(self.get_stores_from_url(csv_url, products))
+        return list(self.get_stores(csv_url, products, addresses))
 
     def get_store_products(self, csv_url: str) -> list[Product]:
         try:
@@ -70,19 +75,61 @@ class RotoCrawler(BaseCrawler):
             logger.exception(f"Failed to get store prices from {csv_url}")
             return []
 
-    def get_stores_from_url(self, csv_url: str, products: list[Product]):
+    def get_stores(
+        self,
+        csv_url: str,
+        products: list[Product],
+        addresses: dict[str, Address],
+    ):
         matches = re.findall(r",\s*(D\d+) ([^,]+),", csv_url)
-        for store_id, city in matches:
+        for store_id, name in matches:
+            if name in addresses:
+                street_address, zipcode, city = addresses[name]
+            else:
+                street_address, zipcode, city = "", "", ""
+                logger.warning(f"Unable to find address for {store_id} {name}")
+
             yield Store(
                 chain=self.CHAIN,
                 store_type="Cash & Carry",
                 store_id=store_id,
-                name="",
-                street_address="",
-                zipcode="",
+                name=f"Cash & Carry {name}",
+                street_address=street_address,
+                zipcode=zipcode,
                 city=city,
                 items=products,
             )
+
+    def parse_store_addresses(self, soup: BeautifulSoup) -> dict[str, Address]:
+        """Returns store address indexed by store name"""
+        addresses = {}
+
+        spans = soup.select(".container > div.mBottom50 > p > span.bold")
+        for span in spans:
+            name = span.text
+            assert span.parent is not None
+            _, address = span.parent
+            assert isinstance(address, str)
+            street_address, zipcode_city = address.strip(" -").split(", ")
+            zipcode, city = zipcode_city.split(" ", maxsplit=1)
+
+            # Remove unwanted address prefix
+            to_strip = "Jankomir- "
+            if street_address.startswith(to_strip):
+                street_address = street_address[len(to_strip) :]
+
+            if name in addresses:
+                logger.warning(f"Duplicate store: {name}")
+
+            addresses[name] = Address(street_address, zipcode, city)
+
+        return addresses
+
+
+class Address(NamedTuple):
+    street_address: str
+    zipcode: str
+    city: str
 
 
 if __name__ == "__main__":
@@ -91,5 +138,4 @@ if __name__ == "__main__":
     yesterday = datetime.date.today() - datetime.timedelta(days=1)
     stores = crawler.get_all_products(yesterday)
     from pprint import pp
-
     pp(stores[0])
