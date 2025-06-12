@@ -81,7 +81,21 @@ class RotoCrawler(BaseCrawler):
         products: list[Product],
         addresses: dict[str, Address],
     ):
-        matches = re.findall(r",\s*(D\d+) ([^,]+),", csv_url)
+        # Extract store ids and names from the CSV file
+        matches = []
+        parts = urlparse(csv_url).path.split(",")
+        for part in parts:
+            part = part.strip()
+            if re.match("D[0-9]+ ", part):
+                store_id, name = part.split(" ")
+                matches.append((store_id, name))
+
+        # Ideally the count will match the addresses extracted from the web page
+        if len(matches) != len(addresses):
+            logger.warning(
+                f"Store count mismatch: found {len(matches)} stores in CSV name and {len(addresses)} stores on the roto web page."
+            )
+
         for store_id, name in matches:
             if name in addresses:
                 street_address, zipcode, city = addresses[name]
@@ -138,4 +152,5 @@ if __name__ == "__main__":
     yesterday = datetime.date.today() - datetime.timedelta(days=1)
     stores = crawler.get_all_products(yesterday)
     from pprint import pp
+
     pp(stores[0])
