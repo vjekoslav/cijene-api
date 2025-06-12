@@ -19,6 +19,7 @@ from .models import (
     Store,
     ChainProduct,
     Price,
+    StorePrice,
     StoreWithId,
     ChainProductWithId,
     User,
@@ -203,6 +204,70 @@ class PostgresDatabase(Database):
                 ean,
             )
             return [ProductWithId(**row) for row in rows]  # type: ignore
+
+    async def get_product_store_prices(
+        self, product_id: int, chain_ids: list[int] | None
+    ) -> list[StorePrice]:
+        async with self._get_conn() as conn:
+            query = """
+                WITH chains_dates AS (
+                  -- Find the latest loaded data per chain
+                    SELECT DISTINCT ON (chain_id) chain_id, price_date AS last_price_date
+                    FROM chain_stats
+                    ORDER BY chain_id, price_date DESC
+                )
+                SELECT
+                    chains.id AS chain_id,
+                    chains.code AS chain_code,
+                    products.ean,
+                    prices.price_date,
+                    prices.regular_price,
+                    prices.special_price,
+                    prices.best_price_30,
+                    prices.unit_price,
+                    prices.anchor_price,
+                    stores.code AS store_code,
+                    stores.type,
+                    stores.address,
+                    stores.city,
+                    stores.zipcode
+                FROM chains_dates
+                JOIN chains ON chains.id = chains_dates.chain_id
+                JOIN chain_products ON chain_products.chain_id = chains.id
+                JOIN products ON products.id = chain_products.product_id
+                JOIN prices ON prices.chain_product_id = chain_products.id
+                           AND prices.price_date = chains_dates.last_price_date
+                JOIN stores ON stores.id = prices.store_id
+                WHERE products.id = $1
+            """
+
+            if chain_ids:
+                query += "AND chains.id = ANY($2)"
+                rows = await conn.fetch(query, product_id, chain_ids)
+            else:
+                rows = await conn.fetch(query, product_id)
+
+            return [
+                StorePrice(
+                    chain=row["chain_code"],
+                    ean=row["ean"],
+                    price_date=row["price_date"],
+                    regular_price=row["regular_price"],
+                    special_price=row["special_price"],
+                    unit_price=row["unit_price"],
+                    best_price_30=row["best_price_30"],
+                    anchor_price=row["anchor_price"],
+                    store=Store(
+                        chain_id=row["chain_id"],
+                        code=row["store_code"],
+                        type=row["type"],
+                        address=row["address"],
+                        city=row["city"],
+                        zipcode=row["zipcode"],
+                    ),
+                )
+                for row in rows
+            ]
 
     async def update_product(self, product: Product) -> bool:
         """

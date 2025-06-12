@@ -11,6 +11,7 @@ from .models import (
     Store,
     ChainProduct,
     Price,
+    StorePrice,
     StoreWithId,
     ChainProductWithId,
     User,
@@ -272,6 +273,24 @@ class Database(ABC):
 
         Returns:
             Information for the specified products and date.
+        """
+        pass
+
+    @abstractmethod
+    async def get_product_store_prices(
+        self,
+        product_id: int,
+        chain_ids: list[int] | None,
+    ) -> list[StorePrice]:
+        """
+        For a given product return latest available prices per store.
+
+        Args:
+            product_id: The ID of the product to fetch
+            chain_ids: Optional list of chain IDs to filter by.
+
+        Returns:
+            A list of StorePrice objects
         """
         pass
 
