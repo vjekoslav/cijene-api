@@ -203,7 +203,7 @@ class DmCrawler(BaseCrawler):
                         "price": self.parse_price(row_map["mpc"], False),
                         "special_price": self.parse_price(
                             row_map[
-                                "mpc za vrijeme posebnog oblika prodaje (rasprodaja proizvoda koji izlaze iz asortimana)"
+                                "mpc za\nvrijeme\nposebnog \noblika\nprodaje (rasprodaja proizvoda koji izlaze iz asortimana)"
                             ],
                             False,
                         ),
