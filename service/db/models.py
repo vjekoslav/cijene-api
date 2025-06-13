@@ -41,6 +41,9 @@ class Store:
     address: Optional[str] = None
     city: Optional[str] = None
     zipcode: Optional[str] = None
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+    phone: Optional[str] = None
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
