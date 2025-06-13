@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 import datetime
 
 from service.config import settings
-from service.db.models import ChainStats, ProductWithId
+from service.db.models import ChainStats, ProductWithId, StorePrice
 from service.routers.auth import RequireAuth
 
 router = APIRouter(tags=["Products, Chains and Stores"], dependencies=[RequireAuth])
@@ -226,6 +226,47 @@ async def get_product(
         )
 
     return product_responses[0]
+
+
+class StorePricesResponse(BaseModel):
+    store_prices: list[StorePrice] = Field(
+        ..., description="For a given product return latest price data per store."
+    )
+
+
+@router.get("/products/{ean}/store-prices/", summary="Get product prices by store")
+async def get_store_prices(
+    ean: str,
+    chains: str = Query(
+        None,
+        description="Comma-separated list of chain codes to include",
+    ),
+) -> StorePricesResponse:
+    """
+    For a single store return prices for each store where the product is
+    available. Returns prices for the last available date. Optionally filtered
+    by chain.
+    """
+    products = await db.get_products_by_ean([ean])
+    if not products:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Product with EAN {ean} not found",
+        )
+
+    [product] = products
+    chain_ids = await _get_chain_ids(chains)
+    store_prices = await db.get_product_store_prices(product.id, chain_ids)
+    return StorePricesResponse(store_prices=store_prices)
+
+
+async def _get_chain_ids(chains_query: str):
+    if not chains_query:
+        return None
+
+    chains = await db.list_chains()
+    chain_codes = [code.lower().strip() for code in chains_query.split(",")]
+    return [c.id for c in chains if c.code in chain_codes]
 
 
 @router.get("/products/", summary="Search for products by name")

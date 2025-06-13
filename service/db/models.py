@@ -95,3 +95,16 @@ class Price:
     unit_price: Optional[Decimal] = None
     best_price_30: Optional[Decimal] = None
     anchor_price: Optional[Decimal] = None
+
+
+@dataclass(frozen=True, slots=True)
+class StorePrice:
+    chain: str
+    ean: str
+    price_date: date
+    regular_price: Optional[Decimal]
+    special_price: Optional[Decimal]
+    unit_price: Optional[Decimal]
+    best_price_30: Optional[Decimal]
+    anchor_price: Optional[Decimal]
+    store: Store
