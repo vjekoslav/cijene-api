@@ -220,6 +220,72 @@ class PostgresDatabase(Database):
 
             return [StoreWithId(**row) for row in rows]  # type: ignore
 
+    async def filter_stores(
+        self,
+        chain_codes: list[str] | None = None,
+        city: str | None = None,
+        address: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        d: float = 10.0,
+    ) -> list[StoreWithId]:
+        # Validate lat/lon parameters
+        if (lat is None) != (lon is None):
+            raise ValueError(
+                "Both lat and lon must be provided together, or both must be None"
+            )
+
+        async with self._get_conn() as conn:
+            # Build the query dynamically based on provided filters
+            where_conditions = []
+            params = []
+            param_counter = 1
+
+            # Chain codes filter
+            if chain_codes:
+                where_conditions.append(f"c.code = ANY(${param_counter})")
+                params.append(chain_codes)
+                param_counter += 1
+
+            # City filter (case-insensitive substring match)
+            if city:
+                where_conditions.append(f"s.city ILIKE ${param_counter}")
+                params.append(f"%{city}%")
+                param_counter += 1
+
+            # Address filter (case-insensitive substring match)
+            if address:
+                where_conditions.append(f"s.address ILIKE ${param_counter}")
+                params.append(f"%{address}%")
+                param_counter += 1
+
+            # Geolocation filter using computed earth_point column
+            if lat is not None and lon is not None:
+                where_conditions.append(
+                    f"s.earth_point IS NOT NULL AND "
+                    f"earth_distance(s.earth_point, ll_to_earth(${param_counter}, ${param_counter + 1})) <= ${param_counter + 2}"
+                )
+                params.extend([lat, lon, d * 1000])  # Convert km to meters
+                param_counter += 3
+
+            # Build the complete query
+            base_query = """
+                SELECT
+                    s.id, s.chain_id, s.code, s.type, s.address, s.city, s.zipcode,
+                    s.lat, s.lon, s.phone
+                FROM stores s
+                JOIN chains c ON s.chain_id = c.id
+            """
+
+            if where_conditions:
+                query = base_query + " WHERE " + " AND ".join(where_conditions)
+            else:
+                query = base_query
+
+            query += " ORDER BY c.code, s.code"
+            rows = await conn.fetch(query, *params)
+            return [StoreWithId(**row) for row in rows]  # type: ignore
+
     async def add_ean(self, ean: str) -> int:
         """
         Add an empty product with only EAN barcode info.

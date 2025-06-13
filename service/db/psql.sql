@@ -49,6 +49,12 @@ ADD COLUMN IF NOT EXISTS lat DOUBLE PRECISION,
 ADD COLUMN IF NOT EXISTS lon DOUBLE PRECISION,
 ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
 
+-- Requires "cube" and "earthdistance" extensions for geospatial queries
+ALTER TABLE stores
+ADD COLUMN IF NOT EXISTS earth_point earth GENERATED ALWAYS AS (ll_to_earth (lat, lon)) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_stores_earth_point ON stores USING GIST (earth_point);
+
 -- Products table to store global product information
 CREATE TABLE IF NOT EXISTS products (
     id SERIAL PRIMARY KEY,

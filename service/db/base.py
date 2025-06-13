@@ -127,6 +127,35 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def filter_stores(
+        self,
+        chain_codes: list[str] | None = None,
+        city: str | None = None,
+        address: str | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        d: float = 10.0,
+    ) -> list[StoreWithId]:
+        """
+        Filter stores by chain codes, city, address, and/or geolocation.
+
+        Args:
+            chain_codes: List of chain codes to filter by (optional).
+            city: City name for case-insensitive substring match (optional).
+            address: Address for case-insensitive substring match (optional).
+            lat: Latitude coordinate for geolocation search (optional).
+            lon: Longitude coordinate for geolocation search (optional).
+            d: Distance in kilometers for geolocation search (default: 10.0).
+
+        Returns:
+            A list of StoreWithId objects matching the filters.
+
+        Raises:
+            ValueError: If only one of lat/lon is provided.
+        """
+        pass
+
+    @abstractmethod
     async def get_product_barcodes(self) -> dict[str, int]:
         """
         Get all product barcodes (EANs).
