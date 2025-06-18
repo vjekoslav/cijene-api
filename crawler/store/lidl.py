@@ -164,6 +164,6 @@ class LidlCrawler(BaseCrawler):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     crawler = LidlCrawler()
-    stores = crawler.get_all_products(datetime.date(2025, 5, 17))
+    stores = crawler.get_all_products(datetime.date.today())
     print(stores[0])
     print(stores[0].items[0])
