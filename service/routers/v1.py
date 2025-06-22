@@ -177,6 +177,9 @@ class ChainProductResponse(BaseModel):
     min_price: Decimal = Field(..., description="Minimum price across chain stores.")
     max_price: Decimal = Field(..., description="Maximum price across chain stores.")
     avg_price: Decimal = Field(..., description="Average price across chain stores.")
+    price_date: datetime.date = Field(
+        ..., description="Date on which this price was published"
+    )
 
 
 class ProductResponse(BaseModel):
@@ -250,6 +253,7 @@ async def prepare_product_response(
         cpr_data["min_price"] = p["min_price"]
         cpr_data["max_price"] = p["max_price"]
         cpr_data["avg_price"] = p["avg_price"]
+        cpr_data["price_date"] = p["price_date"]
         product_response_map[product_id].chains.append(ChainProductResponse(**cpr_data))
 
     # Fixup global product brand and name using chain data

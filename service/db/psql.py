@@ -483,7 +483,8 @@ class PostgresDatabase(Database):
                     cpr.product_id,
                     cp.min_price,
                     cp.max_price,
-                    cp.avg_price
+                    cp.avg_price,
+                    cp.price_date
                 FROM chain_prices cp
                 JOIN chain_products cpr ON cp.chain_product_id = cpr.id
                 JOIN chains c ON cpr.chain_id = c.id
