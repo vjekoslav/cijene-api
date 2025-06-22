@@ -478,23 +478,25 @@ class PostgresDatabase(Database):
         async with self._get_conn() as conn:
             return await conn.fetch(
                 """
-                SELECT
-                    c.code AS chain,
-                    cpr.product_id,
-                    cp.min_price,
-                    cp.max_price,
-                    cp.avg_price,
-                    cp.price_date
-                FROM chain_prices cp
-                JOIN chain_products cpr ON cp.chain_product_id = cpr.id
-                JOIN chains c ON cpr.chain_id = c.id
-                WHERE cpr.product_id = ANY($1)
-                AND cp.price_date = (
-                    SELECT MAX(cp2.price_date)
-                    FROM chain_prices cp2
-                    WHERE cp2.chain_product_id = cp.chain_product_id
-                    AND cp2.price_date <= $2
+                WITH chains_dates AS (
+                    -- Find the latest loaded data per chain
+                   SELECT DISTINCT ON (chain_id) chain_id, price_date AS last_price_date
+                   FROM chain_stats
+                   WHERE price_date <= $2
+                   ORDER BY chain_id, price_date DESC
                 )
+                SELECT chains.code AS chain,
+                       chain_products.product_id,
+                       chain_prices.min_price,
+                       chain_prices.max_price,
+                       chain_prices.avg_price,
+                       chain_prices.price_date
+                FROM chains_dates
+                JOIN chains ON chains.id = chains_dates.chain_id
+                JOIN chain_products ON chain_products.chain_id = chains.id
+                JOIN chain_prices ON chain_prices.chain_product_id = chain_products.id
+                                 AND chain_prices.price_date = chains_dates.last_price_date
+                WHERE chain_products.product_id = ANY($1)
                 """,
                 product_ids,
                 date,
