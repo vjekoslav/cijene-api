@@ -23,7 +23,7 @@ db = settings.get_db()
 async def compute_stats(price_date: Union[datetime, str]) -> None:
     """
     Compute statistics for the given date.
-    
+
     Args:
         price_date: Either a datetime object or a date string in YYYY-MM-DD format
     """
@@ -33,17 +33,17 @@ async def compute_stats(price_date: Union[datetime, str]) -> None:
         except ValueError:
             logger.error(f"Invalid date format: {price_date}. Expected YYYY-MM-DD")
             return
-    
+
     logger.info(f"Computing statistics for {price_date:%Y-%m-%d}")
-    
+
     t0 = time()
-    
+
     logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
     await db.compute_chain_prices(price_date)
 
     logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
     await db.compute_chain_stats(price_date)
-    
+
     dt = int(time() - t0)
     logger.info(f"Computed statistics for {price_date:%Y-%m-%d} in {dt} seconds")
 
@@ -51,7 +51,7 @@ async def compute_stats(price_date: Union[datetime, str]) -> None:
 async def main():
     """
     Standalone CLI for computing statistics.
-    
+
     This allows running statistics computation independently from the import process.
     Useful for recomputing stats on existing data or batch processing multiple dates.
     """
@@ -87,4 +87,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main()) 
+    asyncio.run(main())

@@ -331,7 +331,9 @@ async def import_directory(path: Path, compute_stats_flag: bool = True) -> None:
     await _import(path, price_date, compute_stats_flag)
 
 
-async def _import(path: Path, price_date: datetime, compute_stats_flag: bool = True) -> None:
+async def _import(
+    path: Path, price_date: datetime, compute_stats_flag: bool = True
+) -> None:
     chain_dirs = [d.resolve() for d in path.iterdir() if d.is_dir()]
     if not chain_dirs:
         logger.warning(f"No chain directories found in {path}")
