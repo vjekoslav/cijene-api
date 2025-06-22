@@ -298,7 +298,7 @@ async def process_chain(
     logger.info(f"Imported {n_new_prices} new prices for {code}")
 
 
-async def import_archive(path: Path):
+async def import_archive(path: Path, compute_stats: bool):
     """Import data from all chain directories in the given zip archive."""
     try:
         price_date = datetime.strptime(path.stem, "%Y-%m-%d")
@@ -310,10 +310,10 @@ async def import_archive(path: Path):
         logger.debug(f"Extracting archive {path} to {temp_dir}")
         with zipfile.ZipFile(path, "r") as zip_ref:
             zip_ref.extractall(temp_dir)
-        await _import(Path(temp_dir), price_date)
+        await _import(Path(temp_dir), price_date, compute_stats)
 
 
-async def import_directory(path: Path) -> None:
+async def import_directory(path: Path, compute_stats: bool) -> None:
     """Import data from all chain directories in the given directory."""
     if not path.is_dir():
         logger.error(f"`{path}` does not exist or is not a directory")
@@ -327,10 +327,10 @@ async def import_directory(path: Path) -> None:
         )
         return
 
-    await _import(path, price_date)
+    await _import(path, price_date, compute_stats)
 
 
-async def _import(path: Path, price_date: datetime) -> None:
+async def _import(path: Path, price_date: datetime, compute_stats: bool = True) -> None:
     chain_dirs = [d.resolve() for d in path.iterdir() if d.is_dir()]
     if not chain_dirs:
         logger.warning(f"No chain directories found in {path}")
@@ -344,14 +344,17 @@ async def _import(path: Path, price_date: datetime) -> None:
     for chain_dir in chain_dirs:
         await process_chain(price_date, chain_dir, barcodes)
 
-    logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
-    await db.compute_chain_prices(price_date)
+    if compute_stats:
+        logger.debug(f"Computing average chain prices for {price_date:%Y-%m-%d}")
+        await db.compute_chain_prices(price_date)
 
-    logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
-    await db.compute_chain_stats(price_date)
+        logger.debug(f"Computing chain stats for {price_date:%Y-%m-%d}")
+        await db.compute_chain_stats(price_date)
+    else:
+        logger.debug(f"Skipping chain prices for {price_date:%Y-%m-%d}")
+        logger.debug(f"Skipping chain stats for {price_date:%Y-%m-%d}")
 
-    t1 = time()
-    dt = int(t1 - t0)
+    dt = int(time() - t0)
     logger.info(f"Imported {len(chain_dirs)} chains in {dt} seconds")
 
 
@@ -382,6 +385,12 @@ async def main():
         nargs="+",
     )
     parser.add_argument(
+        "-s",
+        "--skip-stats",
+        action="store_true",
+        help="Skip computing chain stats",
+    )
+    parser.add_argument(
         "-d",
         "--debug",
         action="store_true",
@@ -394,6 +403,8 @@ async def main():
         format="%(asctime)s:%(name)s:%(levelname)s:%(message)s",
     )
 
+    compute_stats = not args.skip_stats
+
     await db.connect()
 
     try:
@@ -401,9 +412,9 @@ async def main():
 
         for path in args.paths:
             if path.is_dir():
-                await import_directory(path)
+                await import_directory(path, compute_stats)
             elif path.suffix.lower() == ".zip":
-                await import_archive(path)
+                await import_archive(path, compute_stats)
             else:
                 logger.error(f"Path `{path}` is neither a directory nor a zip archive.")
     finally:

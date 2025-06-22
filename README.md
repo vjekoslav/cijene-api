@@ -96,6 +96,22 @@ predstavlja datum za koji se podaci uvoze, i sadržavati CSV datoteke u
 istom formatu kakve generira crawler (*ne* CSV datoteke skinute sa stranica
 nekog trgovačkog lanca!).
 
+##### Opcije za uvoz
+
+Moguće je preskočiti računanje statistika tijekom uvoza (što može značajno ubrzati proces):
+
+```bash
+uv run -m service.db.import -s /path/to/csv-folder/
+# ili
+uv run -m service.db.import --skip-stats /path/to/csv-folder/
+```
+
+Za debug informacije koristite `-d` opciju:
+
+```bash
+uv run -m service.db.import -d /path/to/csv-folder/
+```
+
 ## Dodatni podaci o proizvodima
 
 Dodatni pročišćeni podaci o proizvodima (naziv, marka, količina, jedinica mjere)
