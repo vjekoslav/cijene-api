@@ -76,6 +76,7 @@ def main():
         host=settings.host,
         port=settings.port,
         log_level=log_level,
+        reload=settings.debug,
     )
 
 
