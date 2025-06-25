@@ -249,7 +249,7 @@ class BaseCrawler:
             else:
                 data["price"] = data["special_price"]
 
-        if data["anchor_price"] is not None and not data.get("anchor_price_date"):
+        if data.get("anchor_price") is not None and not data.get("anchor_price_date"):
             data["anchor_price_date"] = datetime.date(2025, 5, 2).isoformat()
 
         if data["unit_price"] is None:
