@@ -93,7 +93,6 @@ class SparCrawler(BaseCrawler):
         "quantity": ("neto količina", False),
         "unit": ("jedinica mjere", False),
         "category": ("kategorija proizvoda", False),
-        "anchor_price_date": ("datum sidrene cijene", False),
     }
 
     # Required to detect text encoding
