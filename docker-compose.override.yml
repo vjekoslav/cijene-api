@@ -1,0 +1,29 @@
+# Override file for development
+# This file is automatically loaded by docker-compose for local development
+# Use: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+services:
+  api:
+    build:
+      target: development
+    environment:
+      DEBUG: "true"
+    volumes:
+      - .:/app  # Mount source code for development
+    command: ["uv", "run", "-m", "service.main", "--reload"]
+
+  crawler:
+    build:
+      target: development
+    volumes:
+      - ./crawler:/app
+
+  # Additional services for development
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    environment:
+      ADMINER_DEFAULT_SERVER: db
