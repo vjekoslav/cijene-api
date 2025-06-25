@@ -31,7 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean
 
 # Install uv (pinned version for reproducibility)
-RUN pip install uv==0.5.8
+RUN pip install uv==0.7.14
 
 # Dependencies stage
 FROM base AS deps

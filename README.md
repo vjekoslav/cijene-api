@@ -42,6 +42,27 @@ cd cijene-api
 uv sync --dev
 ```
 
+### Docker (preporučeno)
+
+Projekt uključuje potpunu Docker konfiguraciju za lakše pokretanje i deployment. Docker setup omogućava:
+
+* Containeriziran API servis s PostgreSQL bazom podataka
+* Automatsko pokretanje crawler servisa
+* Razvojno okruženje s hot reload funkcionalnosti
+* Automatizirano cron pokretanje crawler-a
+
+Za detaljne Docker instrukcije, konfiguraciju i sve opcije pokretanja, pogledajte [DOCKER.md](DOCKER.md).
+
+**Brza instalacija s Docker-om:**
+
+```bash
+git clone https://github.com/senko/cijene-api.git
+cd cijene-api
+cp .env.example .env
+# Uredite .env prema potrebi
+docker-compose up -d
+```
+
 ## Korištenje
 
 ### Crawler
