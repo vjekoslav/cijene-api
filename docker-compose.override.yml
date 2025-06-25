@@ -4,12 +4,12 @@
 services:
   api:
     build:
+      context: .
       target: development
-
+    env_file:
+      - .env
     environment:
       # Override for development
-      PYTHONUTF8: 1
-      PYTHONUNBUFFERED: 1
       DEBUG: "true"
       DEV_MODE: "true"
     volumes:
@@ -18,7 +18,13 @@ services:
 
   crawler:
     build:
+      context: .
       target: development
+    env_file:
+      - .env
+    environment:
+      DEBUG: "true"
+      DEV_MODE: "true"
     volumes:
       - .:/app  # Mount source code for development
 

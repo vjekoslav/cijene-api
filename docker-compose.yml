@@ -5,7 +5,7 @@ services:
       - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./service/db/psql.sql:/docker-entrypoint-initdb.d/01-init.sql
+      - ./service/db/psql.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
@@ -13,16 +13,18 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     restart: unless-stopped
 
   api:
-    build: .
+    build:
+      context: .
+      target: production
     env_file:
       - .env
     volumes:
       - ./data:/app/data:ro
       - ./enrichment:/app/enrichment:ro
-    command: ["uv", "run", "-m", "service.main"]
     ports:
       - "${PORT:-8000}:8000"
     depends_on:
@@ -33,10 +35,13 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 30s
     restart: unless-stopped
 
   crawler:
-    build: .
+    build:
+      context: .
+      target: production
     env_file:
       - .env
     volumes:
@@ -49,3 +54,4 @@ services:
 
 volumes:
   postgres_data:
+    driver: local

@@ -21,7 +21,6 @@ wheels/
 *.egg
 
 # Virtual environments
-.env
 .venv
 env/
 venv/
@@ -49,13 +48,7 @@ Thumbs.db
 .git/
 .gitignore
 
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
-
-# Data and logs
-data/
+# Data and logs (keep data/ and output/ for development)
 logs/
 *.log
 
@@ -69,3 +62,18 @@ logs/
 # Documentation
 README.md
 LICENSE
+CLAUDE.md
+
+# Test files
+test/
+tests/
+*_test.py
+test_*.py
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Local environment files (keep .env.example)
+.env
