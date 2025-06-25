@@ -5,7 +5,7 @@ from typing import Optional
 from json import loads
 
 
-from crawler.store.models import Store, Product
+from crawler.store.models import Store
 
 from .base import BaseCrawler
 
