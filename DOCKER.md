@@ -124,11 +124,13 @@ services:
 
 ### Environment datoteka (.env)
 
-Projekt zahtijeva `.env` datoteku za konfiguraciju:
+Projekt zahtijeva `.env` datoteku za Docker konfiguraciju:
 
 ```bash
-cp .env.example .env
+cp .env.docker.example .env
 ```
+
+**Napomena**: Za Docker deployment koristite `.env.docker.example` kao template. Za lokalni razvoj bez Docker-a koristite `.env.example`.
 
 **Ključne kategorije konfiguracije**:
 
@@ -205,7 +207,7 @@ Optimizirani build kontekst isključuje:
 
 ```bash
 # Postavljanje okruženja
-cp .env.example .env
+cp .env.docker.example .env
 # Uredite .env za produkciju
 
 # Pokretanje osnovnih servisa
@@ -220,7 +222,7 @@ docker-compose logs api
 
 ```bash
 # Postavljanje okruženja
-cp .env.example .env
+cp .env.docker.example .env
 
 # Pokretanje s razvojnim override-ima
 docker-compose up -d
