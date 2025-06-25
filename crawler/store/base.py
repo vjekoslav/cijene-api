@@ -325,7 +325,21 @@ class BaseCrawler:
         logger.debug("Parsing CSV content")
 
         products = []
-        for row in self.read_csv(content, delimiter=delimiter):
+        reader = self.read_csv(content, delimiter=delimiter)
+        assert reader.fieldnames is not None
+
+        # Make sure all defined columns exist in the CSV
+        csv_columns = list(reader.fieldnames)
+        price_columns = [column for column, _ in self.PRICE_MAP.values()]
+        field_columns = [column for column, _ in self.FIELD_MAP.values()]
+        for column in price_columns + field_columns:
+            if column not in csv_columns:
+                available = ", ".join(f'"{c}"' for c in csv_columns)
+                raise ValueError(
+                    f'Column "{column}" not found in CSV file. CSV columns: {available}'
+                )
+
+        for row in reader:
             try:
                 product = self.parse_csv_row(row)
             except Exception as e:
