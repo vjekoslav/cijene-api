@@ -78,11 +78,11 @@ class SparCrawler(BaseCrawler):
         "gospic",
     ]
     PRICE_MAP = {
-        "price": ("MPC", False),
-        "unit_price": ("cijena za jedinicu mjere", False),
-        "special_price": ("MPC za vrijeme posebnog oblika prodaje", False),
-        "best_price_30": ("Najniža cijena u posljednjih 30 dana", False),
-        "anchor_price": ("sidrena cijena na 2.5.2025.", False),
+        "price": ("MPC (EUR)", False),
+        "unit_price": ("cijena za jedinicu mjere (EUR)", False),
+        "special_price": ("MPC za vrijeme posebnog oblika prodaje (EUR)", False),
+        "best_price_30": ("Najniža cijena u posljednjih 30 dana (EUR)", False),
+        "anchor_price": ("sidrena cijena na 2.5.2025. (EUR)", False),
     }
 
     FIELD_MAP = {
@@ -169,10 +169,6 @@ class SparCrawler(BaseCrawler):
             f"Parsed store: {store.name} ({store.store_id}), {store.store_type}, {store.city}, {store.street_address}"
         )
         return store
-
-    def parse_csv_row(self, row: dict) -> Product:
-        fixed_row = {k.replace("(EUR)", "").strip(): v for k, v in row.items()}
-        return super().parse_csv_row(fixed_row)
 
     def get_all_products(self, date: datetime.date) -> list[Store]:
         """
