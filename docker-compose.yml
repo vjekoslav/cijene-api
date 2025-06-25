@@ -1,17 +1,15 @@
 services:
   db:
     image: postgres:17-alpine
-    environment:
-      POSTGRES_DB: cijene
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./service/db/psql.sql:/docker-entrypoint-initdb.d/01-init.sql
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d cijene"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-cijene_user} -d ${POSTGRES_DB:-cijene}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -19,44 +17,35 @@ services:
 
   api:
     build: .
-    environment:
-      DB_DSN: postgresql://postgres:postgres@db/cijene
-      HOST: 0.0.0.0
-      PORT: 8000
-      DEBUG: "false"
-      BASE_URL: http://localhost:8000
-      REDIRECT_URL: https://cijene.dev
-      ARCHIVE_DIR: /app/data
-      TIMEZONE: Europe/Zagreb
-      DB_MIN_CONNECTIONS: 5
-      DB_MAX_CONNECTIONS: 20
-    command: ["uv", "run", "-m", "service.main"]
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data:ro
       - ./enrichment:/app/enrichment:ro
+    command: ["uv", "run", "-m", "service.main"]
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
-    restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
 
   crawler:
     build: .
-    environment:
-      PYTHONUTF8: 1
+    env_file:
+      - .env
     volumes:
       - ./data:/app/data
-      - ./ouput:/app/output
+      - ./output:/app/output
     command: ["uv", "run", "-m", "crawler.cli.crawl", "/app/output"]
     profiles:
       - crawler
-    restart: unless-stopped
+    restart: "no"
 
 volumes:
   postgres_data:
