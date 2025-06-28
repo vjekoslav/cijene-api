@@ -27,13 +27,3 @@ services:
       DEV_MODE: "true"
     volumes:
       - .:/app  # Mount source code for development
-
-  # Additional services for development
-  adminer:
-    image: adminer
-    env_file:
-      - .env
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
