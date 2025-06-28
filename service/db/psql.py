@@ -314,7 +314,9 @@ class PostgresDatabase(Database):
             return [ProductWithId(**row) for row in rows]  # type: ignore
 
     async def get_product_store_prices(
-        self, product_id: int, chain_ids: list[int] | None
+        self,
+        product_ids: list[int],
+        store_ids: list[int] | None = None,
     ) -> list[StorePrice]:
         async with self._get_conn() as conn:
             query = """
@@ -338,7 +340,10 @@ class PostgresDatabase(Database):
                     stores.type,
                     stores.address,
                     stores.city,
-                    stores.zipcode
+                    stores.zipcode,
+                    stores.lat,
+                    stores.lon,
+                    stores.phone
                 FROM chains_dates
                 JOIN chains ON chains.id = chains_dates.chain_id
                 JOIN chain_products ON chain_products.chain_id = chains.id
@@ -346,14 +351,18 @@ class PostgresDatabase(Database):
                 JOIN prices ON prices.chain_product_id = chain_products.id
                            AND prices.price_date = chains_dates.last_price_date
                 JOIN stores ON stores.id = prices.store_id
-                WHERE products.id = $1
+                WHERE products.id = ANY($1)
             """
 
-            if chain_ids:
-                query += "AND chains.id = ANY($2)"
-                rows = await conn.fetch(query, product_id, chain_ids)
-            else:
-                rows = await conn.fetch(query, product_id)
+            params = [product_ids]
+            param_idx = 2
+
+            if store_ids is not None:
+                query += f" AND stores.id = ANY(${param_idx})"
+                params.append(store_ids)
+                param_idx += 1
+
+            rows = await conn.fetch(query, *params)
 
             return [
                 StorePrice(
@@ -372,6 +381,9 @@ class PostgresDatabase(Database):
                         address=row["address"],
                         city=row["city"],
                         zipcode=row["zipcode"],
+                        lat=row["lat"],
+                        lon=row["lon"],
+                        phone=row["phone"],
                     ),
                 )
                 for row in rows
@@ -478,22 +490,25 @@ class PostgresDatabase(Database):
         async with self._get_conn() as conn:
             return await conn.fetch(
                 """
-                SELECT
-                    c.code AS chain,
-                    cpr.product_id,
-                    cp.min_price,
-                    cp.max_price,
-                    cp.avg_price
-                FROM chain_prices cp
-                JOIN chain_products cpr ON cp.chain_product_id = cpr.id
-                JOIN chains c ON cpr.chain_id = c.id
-                WHERE cpr.product_id = ANY($1)
-                AND cp.price_date = (
-                    SELECT MAX(cp2.price_date)
-                    FROM chain_prices cp2
-                    WHERE cp2.chain_product_id = cp.chain_product_id
-                    AND cp2.price_date <= $2
+                WITH chains_dates AS (
+                    -- Find the latest loaded data per chain
+                   SELECT DISTINCT ON (chain_id) chain_id, price_date AS last_price_date
+                   FROM chain_stats
+                   WHERE price_date <= $2
+                   ORDER BY chain_id, price_date DESC
                 )
+                SELECT chains.code AS chain,
+                       chain_products.product_id,
+                       chain_prices.min_price,
+                       chain_prices.max_price,
+                       chain_prices.avg_price,
+                       chain_prices.price_date
+                FROM chains_dates
+                JOIN chains ON chains.id = chains_dates.chain_id
+                JOIN chain_products ON chain_products.chain_id = chains.id
+                JOIN chain_prices ON chain_prices.chain_product_id = chain_products.id
+                                 AND chain_prices.price_date = chains_dates.last_price_date
+                WHERE chain_products.product_id = ANY($1)
                 """,
                 product_ids,
                 date,
