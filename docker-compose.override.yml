@@ -6,7 +6,7 @@ services:
     build:
       context: .
       target: development-api
-    image: cijene-api:development
+    image: cijene-api:${VERSION:-latest}-dev
     environment:
       DEBUG: "true"
       DEV_MODE: "true"
@@ -21,7 +21,7 @@ services:
     build:
       context: .
       target: development-crawler
-    image: cijene-crawler:development
+    image: cijene-crawler:${VERSION:-latest}-dev
     environment:
       DEBUG: "true"
       DEV_MODE: "true"
