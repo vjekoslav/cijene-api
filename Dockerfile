@@ -54,7 +54,7 @@ USER appuser
 EXPOSE 8000
 
 FROM common AS development
-RUN uv sync --frozen
+RUN uv sync --frozen --dev
 # Note: No COPY needed - docker-compose mounts source code via volume
 CMD ["uv", "run", "-m", "service.main", "--reload"]
 
