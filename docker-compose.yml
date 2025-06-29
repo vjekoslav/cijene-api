@@ -23,8 +23,8 @@ services:
     env_file:
       - .env
     volumes:
-      - ./data:/app/data:ro
-      - ./enrichment:/app/enrichment:ro
+      - ./data:/app/data
+      - ./enrichment:/app/enrichment
     ports:
       - "${PORT:-8000}:8000"
     depends_on:
