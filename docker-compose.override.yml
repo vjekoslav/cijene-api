@@ -6,24 +6,28 @@ services:
     build:
       context: .
       target: development
-    env_file:
-      - .env
     environment:
       # Override for development
       DEBUG: "true"
       DEV_MODE: "true"
     volumes:
-      - .:/app  # Mount source code for development
+      - ./service:/app/service
+      - ./data:/app/data
+      - ./enrichment:/app/enrichment
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
     command: ["uv", "run", "-m", "service.main", "--reload"]
 
   crawler:
     build:
       context: .
       target: development
-    env_file:
-      - .env
     environment:
       DEBUG: "true"
       DEV_MODE: "true"
     volumes:
-      - .:/app  # Mount source code for development
+      - ./crawler:/app/crawler
+      - ./data:/app/data
+      - ./output:/app/output
+      - ./pyproject.toml:/app/pyproject.toml
+      - ./uv.lock:/app/uv.lock
