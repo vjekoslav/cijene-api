@@ -6,8 +6,8 @@ services:
     build:
       context: .
       target: development-api
+    image: cijene-api:development
     environment:
-      # Override for development
       DEBUG: "true"
       DEV_MODE: "true"
     volumes:
@@ -21,6 +21,7 @@ services:
     build:
       context: .
       target: development-crawler
+    image: cijene-crawler:development
     environment:
       DEBUG: "true"
       DEV_MODE: "true"

@@ -20,6 +20,7 @@ services:
     build:
       context: .
       target: production-api
+    image: cijene-api:production
     env_file:
       - .env
     volumes:
@@ -42,6 +43,7 @@ services:
     build:
       context: .
       target: production-crawler
+    image: cijene-crawler:production
     env_file:
       - .env
     volumes:

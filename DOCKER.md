@@ -15,7 +15,7 @@ cp .env.docker.example .env
 
 ### Produkcija
 ```bash
-docker-compose up -d
+docker-compose -f docker-compose.yml up -d
 ```
 
 ### Razvoj
