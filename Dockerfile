@@ -53,22 +53,12 @@ USER appuser
 
 EXPOSE 8000
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Development stage (with dev dependencies)
 FROM common AS development
-
-# Install all dependencies (including dev dependencies)
 RUN uv sync --frozen
-
 # Note: No COPY needed - docker-compose mounts source code via volume
 CMD ["uv", "run", "-m", "service.main", "--reload"]
 
 FROM common AS production
-
 RUN uv sync --frozen --no-dev
-
 COPY --chown=appuser:appuser . .
-
 CMD ["uv", "run", "-m", "service.main"]
