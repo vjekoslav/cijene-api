@@ -324,9 +324,9 @@ class BaseCrawler:
         """
         logger.debug("Parsing CSV content")
 
-        products = []
         reader = self.read_csv(content, delimiter=delimiter)
-        assert reader.fieldnames is not None
+        if not reader.fieldnames:
+            raise ValueError("CSV file is missing the header row")
 
         # Make sure all defined columns exist in the CSV
         csv_columns = list(reader.fieldnames)
@@ -339,6 +339,7 @@ class BaseCrawler:
                     f'Column "{column}" not found in CSV file. CSV columns: {available}'
                 )
 
+        products = []
         for row in reader:
             try:
                 product = self.parse_csv_row(row)
