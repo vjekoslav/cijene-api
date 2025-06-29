@@ -5,7 +5,7 @@ services:
   api:
     build:
       context: .
-      target: development
+      target: development-api
     environment:
       # Override for development
       DEBUG: "true"
@@ -16,12 +16,11 @@ services:
       - ./enrichment:/app/enrichment
       - ./pyproject.toml:/app/pyproject.toml
       - ./uv.lock:/app/uv.lock
-    command: ["uv", "run", "-m", "service.main", "--reload"]
 
   crawler:
     build:
       context: .
-      target: development
+      target: development-crawler
     environment:
       DEBUG: "true"
       DEV_MODE: "true"

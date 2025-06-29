@@ -51,14 +51,25 @@ RUN useradd --create-home --shell /bin/bash --uid 1001 --no-log-init appuser \
 # Switch to non-root user early for security
 USER appuser
 
+# Development targets
+FROM common AS development-api
 EXPOSE 8000
-
-FROM common AS development
 RUN uv sync --frozen --dev
-# Note: No COPY needed - docker-compose mounts source code via volume
 CMD ["uv", "run", "-m", "service.main", "--reload"]
 
-FROM common AS production
+FROM common AS development-crawler
+RUN uv sync --frozen --dev
+CMD ["uv", "run", "-m", "crawler.cli.crawl", "/app/output"]
+
+# Production targets
+FROM common AS production-api
+EXPOSE 8000
 RUN uv sync --frozen --no-dev
-COPY --chown=appuser:appuser . .
+COPY --chown=appuser:appuser service/ ./service/
+COPY --chown=appuser:appuser enrichment/ ./enrichment/
 CMD ["uv", "run", "-m", "service.main"]
+
+FROM common AS production-crawler
+RUN uv sync --frozen --no-dev
+COPY --chown=appuser:appuser crawler/ ./crawler/
+CMD ["uv", "run", "-m", "crawler.cli.crawl", "/app/output"]

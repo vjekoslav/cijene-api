@@ -19,7 +19,7 @@ services:
   api:
     build:
       context: .
-      target: production
+      target: production-api
     env_file:
       - .env
     volumes:
@@ -41,13 +41,12 @@ services:
   crawler:
     build:
       context: .
-      target: production
+      target: production-crawler
     env_file:
       - .env
     volumes:
       - ./data:/app/data
       - ./output:/app/output
-    command: ["uv", "run", "-m", "crawler.cli.crawl", "/app/output"]
     profiles:
       - crawler
     restart: "no"
