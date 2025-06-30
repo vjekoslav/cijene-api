@@ -13,6 +13,7 @@ services:
     volumes:
       - ./service:/app/service
       - ./data:/app/data
+      - ./output:/app/output
       - ./enrichment:/app/enrichment
       - ./pyproject.toml:/app/pyproject.toml
       - ./uv.lock:/app/uv.lock
