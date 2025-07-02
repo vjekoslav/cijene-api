@@ -37,7 +37,7 @@ class RotoCrawler(BaseCrawler):
         "product": ("Naziv artikla", False),
         "product_id": ("Šifra artikla", True),
         "brand": ("BRAND", False),
-        "quantity": ("neto koli?ina", False),
+        "quantity": ("neto količina", False),
         "unit": ("Jedinica mjere", False),
         "barcode": ("Barkod", False),
         "category": ("Kategorija proizvoda", False),
