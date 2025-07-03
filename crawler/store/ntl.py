@@ -2,7 +2,7 @@ import datetime
 import logging
 import os
 import re
-from urllib.parse import unquote
+from urllib.parse import unquote, quote_plus
 
 from bs4 import BeautifulSoup
 from crawler.store.models import Product, Store
@@ -62,6 +62,88 @@ class NtlCrawler(BaseCrawler):
             urls.append(href)
 
         return list(set(urls))  # Return unique URLs
+
+    def get_store_list(self) -> list[str]:
+        """
+        Get list of all available stores from the main page dropdown.
+
+        Returns:
+            List of store names
+        """
+        content = self.fetch_text(self.BASE_URL)
+        if not content:
+            logger.warning(f"No content found at NTL index URL: {self.BASE_URL}")
+            return []
+
+        soup = BeautifulSoup(content, "html.parser")
+        stores = []
+
+        select_element = soup.find("select")
+        if not select_element:
+            logger.warning("No store dropdown found on the NTL index page")
+            return []
+
+        options = select_element.select("option[value]")
+        for option in options:
+            store_value = option.get("value", "").strip()
+            if store_value and not store_value.startswith("Odaberi"):
+                stores.append(store_value)
+
+        logger.info(f"Found {len(stores)} stores: {'; '.join(stores)}")
+        return stores
+
+    def get_historical_csv_for_date(
+        self,
+        store_name: str,
+        target_date: datetime.date,
+    ) -> str | None:
+        """
+        Get historical CSV URL for a specific store and date.
+
+        Args:
+            store_name: Store name from dropdown
+            target_date: Date to find CSV for
+
+        Returns:
+            CSV URL if found, None if not available
+        """
+        archive_url = f"{self.BASE_URL}?pageName=archeive&archive_file_name={quote_plus(store_name)}"
+        logger.debug(f"Fetching archive page for {store_name}: {archive_url}")
+
+        try:
+            content = self.fetch_text(archive_url)
+            if not content:
+                logger.warning(f"No content found at archive URL: {archive_url}")
+                return None
+
+            soup = BeautifulSoup(content, "html.parser")
+
+            target_date_str = target_date.strftime("%d-%m-%Y")
+
+            for row in soup.select("table tr"):
+                cells = row.find_all("td")
+                if len(cells) >= 4:  # Expect at least 4 cells: #, store, date, download
+                    date_cell = cells[2].get_text().strip()
+                    if date_cell == target_date_str:
+                        # Find the download link in the last cell
+                        download_link = cells[-1].select_one("a[href$='.csv']")
+                        if download_link:
+                            csv_url = download_link.get("href")
+                            logger.info(
+                                f"Found historical CSV for {store_name} on {target_date_str}: {csv_url}"
+                            )
+                            return csv_url
+
+            logger.debug(
+                f"No historical data found for {store_name} on {target_date_str}"
+            )
+            return None
+
+        except Exception as e:
+            logger.error(
+                f"Error fetching historical data for {store_name}: {e}", exc_info=True
+            )
+            return None
 
     def parse_store_info(self, url: str) -> Store:
         """
@@ -132,40 +214,55 @@ class NtlCrawler(BaseCrawler):
         """
         Fetch and parse the NTL index page to get CSV URLs.
 
-        Note: NTL only shows current CSV files, so the date parameter is ignored.
-
         Args:
-            date: The date parameter (ignored for NTL)
+            date: The date to fetch CSV files for
 
         Returns:
-            List of all CSV URLs available on the index page.
+            List of CSV URLs available for the given date.
         """
-        logger.warning(
-            f"NTL crawler ignores date parameter ({date:%Y-%m-%d}) - "
-            "only current CSV files are available"
-        )
+        today = datetime.date.today()
 
-        content = self.fetch_text(self.BASE_URL)
+        if date == today:
+            logger.info(f"Fetching current CSV files for today ({date:%Y-%m-%d})")
 
-        if not content:
-            logger.warning(f"No content found at NTL index URL: {self.BASE_URL}")
-            return []
+            content = self.fetch_text(self.BASE_URL)
+            if not content:
+                logger.warning(f"No content found at NTL index URL: {self.BASE_URL}")
+                return []
 
-        all_urls = self.parse_index(content)
+            all_urls = self.parse_index(content)
+            if not all_urls:
+                logger.warning("No NTL CSV URLs found on index page")
 
-        if not all_urls:
-            logger.warning("No NTL CSV URLs found on index page")
+            return all_urls
+        else:
+            logger.info(f"Fetching historical CSV files for date ({date:%Y-%m-%d})")
 
-        return all_urls
+            stores = self.get_store_list()
+            if not stores:
+                logger.warning("No stores found in dropdown")
+                return []
+
+            historical_urls = []
+            for store_name in stores:
+                csv_url = self.get_historical_csv_for_date(store_name, date)
+                if csv_url:
+                    historical_urls.append(csv_url)
+
+            if not historical_urls:
+                raise ValueError(f"No stores found for date {date:%Y-%m-%d}")
+
+            logger.info(
+                f"Found {len(historical_urls)} historical CSV files for {date:%Y-%m-%d}"
+            )
+            return historical_urls
 
     def get_all_products(self, date: datetime.date) -> list[Store]:
         """
         Main method to fetch and parse all NTL store, product, and price info.
 
-        Note: Date parameter is ignored as NTL only provides current prices.
-
         Args:
-            date: The date parameter (ignored for NTL)
+            date: The date to fetch data for
 
         Returns:
             List of Store objects with their products.
@@ -173,7 +270,7 @@ class NtlCrawler(BaseCrawler):
         csv_links = self.get_index(date)
 
         if not csv_links:
-            logger.warning("No NTL CSV links found")
+            logger.warning(f"No NTL CSV links found for date {date:%Y-%m-%d}")
             return []
 
         stores = []
