@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS prices (
     chain_product_id INTEGER NOT NULL REFERENCES chain_products (id),
     store_id INTEGER NOT NULL REFERENCES stores (id),
     price_date DATE NOT NULL,
-    regular_price DECIMAL(10, 2),
+    regular_price DECIMAL(10, 2) NOT NULL,
     special_price DECIMAL(10, 2),
     unit_price DECIMAL(10, 2),
     -- current_price DECIMAL(10, 2) NOT NULL,
@@ -100,6 +100,9 @@ CREATE TABLE IF NOT EXISTS prices (
     anchor_price DECIMAL(10, 2),
     UNIQUE (chain_product_id, store_id, price_date)
 );
+
+-- Mark regular_price as required if the table already exists
+ALTER TABLE prices ALTER COLUMN regular_price SET NOT NULL;
 
 -- Prices table to store min/max/avg prices per chain
 CREATE TABLE IF NOT EXISTS chain_prices (
