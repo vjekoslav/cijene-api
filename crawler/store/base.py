@@ -238,7 +238,7 @@ class BaseCrawler:
         if "special_price" not in data:
             data["special_price"] = None
 
-        if data["price"] is None:
+        if data["price"] is None or data["price"] == 0:
             if data.get("special_price") is None:
                 if data.get("unit_price") is not None:
                     data["price"] = data["unit_price"]
