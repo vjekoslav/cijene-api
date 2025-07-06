@@ -27,6 +27,7 @@ from crawler.store.ntl import NtlCrawler
 from crawler.store.trgovina_krk import TrgovinaKrkCrawler
 from crawler.store.brodokomerc import BrodokomercCrawler
 from crawler.store.lorenco import LorencoCrawler
+from crawler.store.boso import BosoCrawler
 
 
 from crawler.store.output import save_chain, copy_archive_info, create_archive
@@ -54,6 +55,7 @@ CRAWLERS = {
     TrgovinaKrkCrawler.CHAIN: TrgovinaKrkCrawler,
     BrodokomercCrawler.CHAIN: BrodokomercCrawler,
     LorencoCrawler.CHAIN: LorencoCrawler,
+    BosoCrawler.CHAIN: BosoCrawler,
 }
 
 

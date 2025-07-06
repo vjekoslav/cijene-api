@@ -643,6 +643,8 @@ if __name__ == "__main__":
 
 5. **Add to crawler registry** in `crawler/crawl.py`:
 
+To register the new crawler, add it to the `CRAWLERS` dictionary in `crawler/crawl.py`:
+
 ```python
 from crawler.store.new_chain import NewChainCrawler
 ...
