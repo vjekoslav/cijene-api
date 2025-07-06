@@ -256,9 +256,32 @@ A few stores provide data in Excel format (.xlsx) instead of CSV or XML. This re
 
 ### 7. Date-Agnostic Crawlers
 
-Some stores only publish the latest price list and do not provide historical data. Their crawlers typically ignore the `date` parameter.
+Some stores only publish the latest price list and do not provide historical data. Their crawlers typically ignore the `date` parameter,
+but should output a warning if the date is provided that's different from the current date.
 
-**Examples**: `NtlCrawler` (`ntl.py`) and `ZabacCrawler` (`zabac.py`).
+**Examples**: `ZabacCrawler` (`zabac.py`).
+
+### 8. Additional considerations
+
+If a crawler needs to issue specific HTTP requests that don't fit into the standard pattern of fetching a text or binary resource,
+it should use `self.client` (an initialized httpx instance) to make those requests. This allows for custom methods, headers, parameters,
+and other HTTP features.
+
+When parsing the HTML content, use the `BeautifulSoup` library (version 4) for parsing, and prefer CSS selectors for element selection,
+like in this example:
+
+```python
+from bs4 import BeautifulSoup
+...
+soup = BeautifulSoup(content, "html.parser")
+urls = []
+csv_links = soup.select("a[href$='.csv']")
+
+for link in csv_links:
+    href = link.get("href")
+    # we know href exists and is non-empty because of our selector
+    urls.append(f"{self.BASE_URL}{href}")
+```
 
 ## Common Implementation Steps
 
@@ -443,6 +466,8 @@ class ChainCrawler(BaseCrawler):
         """
 ```
 
+Note: Docstrings should be concise but informative (one-liner is not enough), and added to all methods.
+
 ## Testing and Debugging
 
 ### Running Individual Crawlers
@@ -456,6 +481,18 @@ if __name__ == "__main__":
     stores = crawler.crawl(datetime.date.today())
     print(stores[0])
     print(stores[0].items[0])
+```
+
+After implementing the crawler, you can run it directly to test functionality and inspect output. From the project root, run:
+
+```bash
+python -m crawler.store.<crawler_module>
+```
+
+To test the integration with the rest of the crawler, check that it is registered with:
+
+```bash
+python -m crawler.cli.crawl -l
 ```
 
 ### Common Debugging Patterns
@@ -604,7 +641,16 @@ if __name__ == "__main__":
     print(f"Found {len(stores)} stores")
 ```
 
-5. **Add to crawler registry** in `__init__.py`
+5. **Add to crawler registry** in `crawler/crawl.py`:
+
+```python
+from crawler.store.new_chain import NewChainCrawler
+...
+CRAWLERS = {
+    # ... existing chains
+    NewChainCrawler.CHAIN: NewChainCrawler,
+}
+```
 
 ### Pre-Implementation Checklist
 
