@@ -24,6 +24,13 @@ Trenutno podržani trgovački lanci:
 * Vrutak
 * Ribola
 * NTL
+* Boso
+* Brodokomerc
+* Lorenco
+* Trgovina Krk
+
+Popis trgovačkih lanaca preuzet sa [IamMusavaRibica/cijene.org](https://github.com/IamMusavaRibica/cijene.org) repozitorija
+pod AGPL licencom, od kojeg smo i posudili podršku za neke od podržanih trgovačkih lanaca. Hvala!
 
 ## Softverska implementacija
 
