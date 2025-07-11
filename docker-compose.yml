@@ -1,11 +1,12 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: timescale/timescaledb:latest-pg17
     env_file:
       - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./service/db/psql.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./service/db/timescale_init.sql:/docker-entrypoint-initdb.d/02-timescale.sql:ro
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
