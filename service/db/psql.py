@@ -8,6 +8,7 @@ from typing import (
 )
 import logging
 import os
+import io
 from datetime import date
 from .base import Database
 from .models import (
@@ -649,9 +650,6 @@ class PostgresDatabase(Database):
 
     async def add_many_prices(self, prices: list[Price]) -> int:
         async with self._atomic() as conn:
-            # Temporarily disable synchronous_commit for bulk insert performance
-            await conn.execute("SET synchronous_commit = off")
-            
             await conn.execute(
                 """
                 CREATE TEMP TABLE temp_prices (
@@ -666,21 +664,22 @@ class PostgresDatabase(Database):
                 )
                 """
             )
-            await conn.copy_records_to_table(
+            # Generate CSV data for optimized bulk insert
+            csv_data = io.BytesIO()
+            for p in prices:
+                csv_line = f"{p.chain_product_id},{p.store_id},{p.price_date}," \
+                          f"{p.regular_price or '\\N'},{p.special_price or '\\N'}," \
+                          f"{p.unit_price or '\\N'},{p.best_price_30 or '\\N'}," \
+                          f"{p.anchor_price or '\\N'}\n"
+                csv_data.write(csv_line.encode('utf-8'))
+            
+            csv_data.seek(0)
+            await conn.copy_to_table(
                 "temp_prices",
-                records=(
-                    (
-                        p.chain_product_id,
-                        p.store_id,
-                        p.price_date,
-                        p.regular_price,
-                        p.special_price,
-                        p.unit_price,
-                        p.best_price_30,
-                        p.anchor_price,
-                    )
-                    for p in prices
-                ),
+                source=csv_data,
+                format='csv',
+                delimiter=',',
+                null='\\N'
             )
             result = await conn.execute(
                 """
@@ -699,9 +698,6 @@ class PostgresDatabase(Database):
                 """
             )
             await conn.execute("DROP TABLE temp_prices")
-            
-            # Restore synchronous_commit setting
-            await conn.execute("SET synchronous_commit = on")
             
             _, _, rowcount = result.split(" ")
             rowcount = int(rowcount)

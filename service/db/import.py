@@ -60,7 +60,7 @@ async def main():
     await db.connect()
 
     try:
-        await db.create_tables()
+        # await db.create_tables()
 
         for path in args.paths:
             if path.is_dir():
