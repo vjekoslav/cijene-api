@@ -190,7 +190,7 @@ async def process_prices(
     chain_product_map: Dict[str, int],
 ) -> int:
     """
-    Process prices CSV and import to database.
+    Process prices CSV and import to database using direct CSV streaming.
 
     Args:
         price_date: The date for which the prices are valid.
@@ -202,37 +202,15 @@ async def process_prices(
     Returns:
         The number of prices successfully inserted into the database.
     """
-    logger.debug(f"Reading prices from {prices_path}")
+    logger.debug(f"Processing prices directly from CSV: {prices_path}")
 
-    prices_data = await read_csv(prices_path)
-    prices_to_create = []
-
-    logger.debug(f"Found {len(prices_data)} price entries, preparing to import")
-
-    for price_row in prices_data:
-        store_id = store_map[price_row["store_id"]]
-        product_id = chain_product_map.get(price_row["product_id"])
-        if product_id is None:
-            # Price for a product that wasn't added, perhaps because the
-            # barcode is invalid
-            logger.warning(
-                f"Skipping price for unknown product {price_row['product_id']}"
-            )
-            continue
-
-        prices_to_create.append(
-            Price(
-                chain_product_id=product_id,
-                store_id=store_id,
-                price_date=price_date,
-                regular_price=Decimal(price_row["price"]),
-                special_price=clean_price(price_row.get("special_price") or ""),
-                unit_price=clean_price(price_row["unit_price"]),
-                best_price_30=clean_price(price_row["best_price_30"]),
-                anchor_price=clean_price(price_row["anchor_price"]),
-            )
-        )
-
-    logger.debug(f"Importing {len(prices_to_create)} prices")
-    n_inserted = await db.add_many_prices(prices_to_create)
+    # Use direct CSV streaming for optimal performance
+    n_inserted = await db.add_many_prices_direct_csv(
+        prices_path, 
+        price_date, 
+        store_map, 
+        chain_product_map
+    )
+    
+    logger.debug(f"Imported {n_inserted} prices using direct CSV streaming")
     return n_inserted
