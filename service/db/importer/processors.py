@@ -27,8 +27,9 @@ async def process_stores(stores_path: Path, chain_id: int) -> Dict[str, int]:
     logger.debug(f"Importing stores from {stores_path}")
 
     stores_data = await read_csv(stores_path)
-    store_map = {}
-
+    
+    # Prepare all stores for bulk insertion
+    stores_to_create = []
     for store_row in stores_data:
         store = Store(
             chain_id=chain_id,
@@ -38,9 +39,10 @@ async def process_stores(stores_path: Path, chain_id: int) -> Dict[str, int]:
             city=store_row.get("city"),
             zipcode=store_row.get("zipcode"),
         )
+        stores_to_create.append(store)
 
-        store_id = await db.add_store(store)
-        store_map[store.code] = store_id
+    # Insert all stores in bulk
+    store_map = await db.add_many_stores(stores_to_create)
 
     logger.debug(f"Processed {len(stores_data)} stores")
     return store_map

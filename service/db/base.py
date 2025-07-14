@@ -84,6 +84,19 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def add_many_stores(self, stores: list[Store]) -> dict[str, int]:
+        """
+        Add multiple stores in a batch operation.
+
+        Args:
+            stores: List of Store objects to add or update.
+
+        Returns:
+            Dictionary mapping store codes to their database IDs.
+        """
+        pass
+
+    @abstractmethod
     async def update_store(
         self,
         chain_id: int,

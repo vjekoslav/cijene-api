@@ -164,6 +164,83 @@ class PostgresDatabase(Database):
             store.zipcode or None,
         )
 
+    async def add_many_stores(self, stores: list[Store]) -> dict[str, int]:
+        """
+        Add multiple stores in a batch operation.
+
+        Args:
+            stores: List of Store objects to add or update.
+
+        Returns:
+            Dictionary mapping store codes to their database IDs.
+        """
+        if not stores:
+            return {}
+
+        async with self._atomic() as conn:
+            # Create temporary table for bulk insert
+            await conn.execute(
+                """
+                CREATE TEMP TABLE temp_stores (
+                    chain_id INTEGER,
+                    code VARCHAR(100),
+                    type VARCHAR(100),
+                    address VARCHAR(255),
+                    city VARCHAR(100),
+                    zipcode VARCHAR(20)
+                )
+                """
+            )
+
+            # Insert all stores into temporary table
+            await conn.copy_records_to_table(
+                "temp_stores",
+                records=[
+                    (
+                        store.chain_id,
+                        store.code,
+                        store.type,
+                        store.address or None,
+                        store.city or None,
+                        store.zipcode or None,
+                    )
+                    for store in stores
+                ],
+            )
+
+            # Perform bulk upsert and get all store IDs
+            await conn.execute(
+                """
+                INSERT INTO stores (chain_id, code, type, address, city, zipcode)
+                SELECT chain_id, code, type, address, city, zipcode
+                FROM temp_stores
+                ON CONFLICT (chain_id, code) DO UPDATE SET
+                    type = COALESCE(EXCLUDED.type, stores.type),
+                    address = COALESCE(EXCLUDED.address, stores.address),
+                    city = COALESCE(EXCLUDED.city, stores.city),
+                    zipcode = COALESCE(EXCLUDED.zipcode, stores.zipcode)
+                """
+            )
+
+            # Fetch all store IDs for the provided stores
+            rows = await conn.fetch(
+                """
+                SELECT s.id, s.code
+                FROM stores s
+                JOIN temp_stores t ON s.chain_id = t.chain_id AND s.code = t.code
+                """
+            )
+
+            # Clean up temporary table
+            await conn.execute("DROP TABLE temp_stores")
+
+            # Build the result dictionary
+            result = {}
+            for row in rows:
+                result[row["code"]] = row["id"]
+
+            return result
+
     async def update_store(
         self,
         chain_id: int,
@@ -572,6 +649,9 @@ class PostgresDatabase(Database):
 
     async def add_many_prices(self, prices: list[Price]) -> int:
         async with self._atomic() as conn:
+            # Temporarily disable synchronous_commit for bulk insert performance
+            await conn.execute("SET synchronous_commit = off")
+            
             await conn.execute(
                 """
                 CREATE TEMP TABLE temp_prices (
@@ -619,6 +699,10 @@ class PostgresDatabase(Database):
                 """
             )
             await conn.execute("DROP TABLE temp_prices")
+            
+            # Restore synchronous_commit setting
+            await conn.execute("SET synchronous_commit = on")
+            
             _, _, rowcount = result.split(" ")
             rowcount = int(rowcount)
             return rowcount
