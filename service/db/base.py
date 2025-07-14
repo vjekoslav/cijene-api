@@ -192,6 +192,19 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def add_many_eans(self, eans: list[str]) -> dict[str, int]:
+        """
+        Add multiple empty products with only EAN codes in a batch operation.
+
+        Args:
+            eans: List of EAN codes to add.
+
+        Returns:
+            Dictionary mapping EAN codes to their database IDs.
+        """
+        pass
+
+    @abstractmethod
     async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
         """
         Get products by their EAN codes.

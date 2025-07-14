@@ -116,18 +116,18 @@ async def process_products(
         f"Found {len(new_products)} new products out of {len(products_data)} total"
     )
 
-    n_new_barcodes = 0
+    # Collect all new barcodes that don't exist in the current barcodes dict
+    new_barcodes = []
     for product in new_products:
         barcode = product["barcode"]
-        if barcode in barcodes:
-            continue
+        if barcode not in barcodes:
+            new_barcodes.append(barcode)
 
-        global_product_id = await db.add_ean(barcode)
-        barcodes[barcode] = global_product_id
-        n_new_barcodes += 1
-
-    if n_new_barcodes:
-        logger.debug(f"Added {n_new_barcodes} new barcodes to global products")
+    # Add all new barcodes in bulk
+    if new_barcodes:
+        new_barcode_ids = await db.add_many_eans(new_barcodes)
+        barcodes.update(new_barcode_ids)
+        logger.debug(f"Added {len(new_barcodes)} new barcodes to global products")
 
     products_to_create = []
     for product in new_products:

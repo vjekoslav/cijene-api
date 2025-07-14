@@ -302,6 +302,62 @@ class PostgresDatabase(Database):
             ean,
         )
 
+    async def add_many_eans(self, eans: list[str]) -> dict[str, int]:
+        """
+        Add multiple empty products with only EAN codes in a batch operation.
+
+        Args:
+            eans: List of EAN codes to add.
+
+        Returns:
+            Dictionary mapping EAN codes to their database IDs.
+        """
+        if not eans:
+            return {}
+
+        async with self._atomic() as conn:
+            # Create temporary table for bulk insert
+            await conn.execute(
+                """
+                CREATE TEMP TABLE temp_eans (
+                    ean VARCHAR(50)
+                )
+                """
+            )
+            
+            # Insert all EAN codes into temporary table
+            await conn.copy_records_to_table(
+                "temp_eans",
+                records=[(ean,) for ean in eans],
+            )
+            
+            # Insert new EAN codes (ignoring conflicts for existing ones)
+            await conn.execute(
+                """
+                INSERT INTO products (ean)
+                SELECT ean FROM temp_eans
+                ON CONFLICT (ean) DO NOTHING
+                """
+            )
+            
+            # Fetch all product IDs for the requested EAN codes
+            rows = await conn.fetch(
+                """
+                SELECT id, ean FROM products
+                WHERE ean IN (SELECT ean FROM temp_eans)
+                """
+            )
+            
+            # Clean up temporary table
+            await conn.execute("DROP TABLE temp_eans")
+            
+            # Build the result dictionary
+            result = {}
+            for row in rows:
+                result[row["ean"]] = row["id"]
+            
+            return result
+
     async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
         async with self._get_conn() as conn:
             rows = await conn.fetch(
