@@ -34,7 +34,7 @@ from .models import (
 class PostgresDatabase(Database):
     """PostgreSQL implementation of the database interface using asyncpg."""
 
-    def __init__(self, dsn: str, min_size: int = 10, max_size: int = 30):
+    def __init__(self, dsn: str, min_size: int = 20, max_size: int = 50):
         """Initialize the PostgreSQL database connection pool.
 
         Args:
@@ -781,9 +781,15 @@ class PostgresDatabase(Database):
                         skipped_count += 1
                         continue
                     
+                    # regular_price is required (NOT NULL constraint)
+                    regular_price = self._clean_price(row['price'])
+                    if regular_price == '\\N':
+                        skipped_count += 1
+                        continue
+                    
                     # Transform row data
                     csv_line = f"{product_id},{store_id},{price_date}," \
-                              f"{self._clean_price(row['price'])}," \
+                              f"{regular_price}," \
                               f"{self._clean_price(row.get('special_price', ''))}," \
                               f"{self._clean_price(row.get('unit_price', ''))}," \
                               f"{self._clean_price(row.get('best_price_30', ''))}," \

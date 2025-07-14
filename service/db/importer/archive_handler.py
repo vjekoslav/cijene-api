@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import zipfile
 from datetime import datetime
@@ -7,7 +8,7 @@ from time import time
 
 from service.config import settings
 from service.db.stats import compute_stats
-from .chain_importer import process_chain
+from .chain_importer import process_chain_products_only, process_chain_stores_and_prices
 
 logger = logging.getLogger("importer.archive_handler")
 
@@ -84,8 +85,14 @@ async def _import(
     t0 = time()
 
     barcodes = await db.get_product_barcodes()
-    for chain_dir in chain_dirs:
-        await process_chain(price_date, chain_dir, barcodes)
+    
+    # Phase 1: Sequential EAN processing to avoid deadlocks
+    logger.debug("Phase 1: Processing EAN codes sequentially")
+    await _process_eans_sequentially(chain_dirs, price_date, barcodes)
+    
+    # Phase 2: Parallel processing of stores and prices
+    logger.debug("Phase 2: Processing stores and prices in parallel")
+    await _process_stores_and_prices_parallel(chain_dirs, price_date, barcodes)
 
     dt = int(time() - t0)
     logger.info(f"Imported {len(chain_dirs)} chains in {dt} seconds")
@@ -94,3 +101,37 @@ async def _import(
         await compute_stats(price_date)
     else:
         logger.debug(f"Skipping statistics computation for {price_date:%Y-%m-%d}")
+
+
+async def _process_eans_sequentially(
+    chain_dirs: list[Path], price_date: datetime, barcodes: dict[str, int]
+) -> None:
+    """
+    Process EAN codes sequentially to avoid database deadlocks.
+    
+    Args:
+        chain_dirs: List of chain directories to process.
+        price_date: Date for which the prices are valid.
+        barcodes: Dictionary of existing EAN codes and their product IDs.
+    """
+    for chain_dir in chain_dirs:
+        await process_chain_products_only(price_date, chain_dir, barcodes)
+
+
+async def _process_stores_and_prices_parallel(
+    chain_dirs: list[Path], price_date: datetime, barcodes: dict[str, int]
+) -> None:
+    """
+    Process stores and prices in parallel since they don't share resources.
+    
+    Args:
+        chain_dirs: List of chain directories to process.
+        price_date: Date for which the prices are valid.
+        barcodes: Dictionary of existing EAN codes and their product IDs.
+    """
+    tasks = []
+    for chain_dir in chain_dirs:
+        task = process_chain_stores_and_prices(price_date, chain_dir, barcodes)
+        tasks.append(task)
+    
+    await asyncio.gather(*tasks)

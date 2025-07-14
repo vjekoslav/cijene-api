@@ -99,3 +99,70 @@ async def process_chain(
     )
 
     logger.info(f"Imported {n_new_prices} new prices for {code}")
+
+
+async def process_chain_products_only(
+    price_date: date,
+    chain_dir: Path,
+    barcodes: Dict[str, int],
+) -> None:
+    """
+    Process only the products/EAN codes for a chain to avoid deadlocks.
+    
+    Args:
+        price_date: The date for which the prices are valid.
+        chain_dir: Path to the directory containing the chain's CSV files.
+        barcodes: Dictionary mapping EAN codes to global product IDs.
+    """
+    if not validate_chain_directory(chain_dir):
+        return
+    
+    code = chain_dir.name
+    logger.debug(f"Processing products for chain: {code}")
+
+    chain = Chain(code=code)
+    chain_id = await db.add_chain(chain)
+
+    files = get_chain_files(chain_dir)
+
+    # Only process products to add EAN codes sequentially
+    await process_products(files.products, chain_id, code, barcodes)
+
+
+async def process_chain_stores_and_prices(
+    price_date: date,
+    chain_dir: Path,
+    barcodes: Dict[str, int],
+) -> None:
+    """
+    Process stores and prices for a chain (EAN codes should already be processed).
+    
+    Args:
+        price_date: The date for which the prices are valid.
+        chain_dir: Path to the directory containing the chain's CSV files.
+        barcodes: Dictionary mapping EAN codes to global product IDs.
+    """
+    if not validate_chain_directory(chain_dir):
+        return
+    
+    code = chain_dir.name
+    logger.debug(f"Processing stores and prices for chain: {code}")
+
+    chain = Chain(code=code)
+    chain_id = await db.add_chain(chain)
+
+    files = get_chain_files(chain_dir)
+
+    # Process stores and prices (products should already be processed)
+    store_map = await process_stores(files.stores, chain_id)
+    chain_product_map = await db.get_chain_product_map(chain_id)
+
+    n_new_prices = await process_prices(
+        price_date,
+        files.prices,
+        chain_id,
+        store_map,
+        chain_product_map,
+    )
+
+    logger.info(f"Imported {n_new_prices} new prices for {code}")
