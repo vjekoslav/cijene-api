@@ -798,7 +798,7 @@ class PostgresDatabase(Database):
                     csv_data.write(csv_line.encode('utf-8'))
             
             if skipped_count > 0:
-                self.logger.warning(f"Skipped {skipped_count} price rows due to missing store/product mappings")
+                self.logger.warning(f"Skipped {skipped_count} price rows due to missing store/product ({store_id}/{product_id}) mappings")
             
             csv_data.seek(0)
             await conn.copy_to_table(
