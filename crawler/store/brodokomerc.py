@@ -177,7 +177,10 @@ class BrodokomercCrawler(BaseCrawler):
         Extract store information from CSV filename.
 
         The filename format is:
-        Supermarket_ADDRESS_CITY_CODE_ID_DATETIME.csv
+            Supermarket_ADDRESS_CITY_CODE_ID_DATETIME.csv
+
+        Example:
+            Supermarket_DRAZICKIH BORACA BB_DRAZICE_22041_243_27052025_07_22_02.csv
 
         Args:
             filename: The CSV filename or path
@@ -199,7 +202,7 @@ class BrodokomercCrawler(BaseCrawler):
             # Format: Supermarket_ADDRESS_CITY_CODE_ID_DATETIME.csv
             address_code = parts[1]  # e.g., 'CANDEKOVA+32'
             city = parts[2]  # e.g., 'RIJEKA'
-            store_id = parts[4]  # e.g., '1022'
+            store_id = parts[3]  # e.g., '22041'
 
             # Map address code to full address
             full_address = self.STORE_ADDRESS_MAPPING.get(
