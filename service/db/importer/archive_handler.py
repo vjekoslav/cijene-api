@@ -82,7 +82,7 @@ async def _import(
 ) -> None:
     """
     Import data from chain directories in the given path.
-
+    
     Args:
         path: Path containing chain directories.
         price_date: Date for which the prices are valid.
@@ -98,11 +98,11 @@ async def _import(
     t0 = time()
 
     barcodes = await db.get_product_barcodes()
-
+    
     # Phase 1: Sequential EAN processing to avoid deadlocks
     logger.debug("Phase 1: Processing EAN codes sequentially")
     await _process_eans_sequentially(chain_dirs, price_date, barcodes)
-
+    
     # Phase 2: Parallel processing of stores and prices
     logger.debug("Phase 2: Processing stores and prices in parallel")
     await _process_stores_and_prices_parallel(chain_dirs, price_date, barcodes)
