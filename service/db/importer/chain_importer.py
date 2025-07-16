@@ -37,15 +37,15 @@ def get_chain_files(chain_dir: Path) -> ChainFiles:
     )
 
 
-def validate_chain_directory(chain_dir: Path) -> bool:
+def validate_chain_directory(chain_dir: Path) -> ChainFiles | None:
     """
-    Validate that a chain directory contains required CSV files.
+    Validate that a chain directory contains required CSV files and return them.
 
     Args:
         chain_dir: Path to the chain directory.
 
     Returns:
-        True if all required files exist, False otherwise.
+        ChainFiles if all required files exist, None otherwise.
     """
     code = chain_dir.name
     files = get_chain_files(chain_dir)
@@ -53,9 +53,24 @@ def validate_chain_directory(chain_dir: Path) -> bool:
     for file_path in files:
         if not file_path.exists():
             logger.warning(f"No {file_path.name} found for chain {code}")
-            return False
+            return None
 
-    return True
+    return files
+
+
+async def setup_chain(chain_dir: Path) -> int:
+    """
+    Set up a chain in the database and return its ID.
+
+    Args:
+        chain_dir: Path to the chain directory.
+
+    Returns:
+        The database ID of the chain.
+    """
+    code = chain_dir.name
+    chain = Chain(code=code)
+    return await db.add_chain(chain)
 
 
 async def process_chain_products_only(
@@ -71,16 +86,14 @@ async def process_chain_products_only(
         chain_dir: Path to the directory containing the chain's CSV files.
         barcodes: Dictionary mapping EAN codes to global product IDs.
     """
-    if not validate_chain_directory(chain_dir):
+    files = validate_chain_directory(chain_dir)
+    if files is None:
         return
 
     code = chain_dir.name
     logger.debug(f"Processing products for chain: {code}")
 
-    chain = Chain(code=code)
-    chain_id = await db.add_chain(chain)
-
-    files = get_chain_files(chain_dir)
+    chain_id = await setup_chain(chain_dir)
 
     # Only process products to add EAN codes sequentially
     await process_products(files.products, chain_id, code, barcodes)
@@ -99,16 +112,14 @@ async def process_chain_stores_and_prices(
         chain_dir: Path to the directory containing the chain's CSV files.
         barcodes: Dictionary mapping EAN codes to global product IDs.
     """
-    if not validate_chain_directory(chain_dir):
+    files = validate_chain_directory(chain_dir)
+    if files is None:
         return
 
     code = chain_dir.name
     logger.debug(f"Processing stores and prices for chain: {code}")
 
-    chain = Chain(code=code)
-    chain_id = await db.add_chain(chain)
-
-    files = get_chain_files(chain_dir)
+    chain_id = await setup_chain(chain_dir)
 
     # Process stores and prices (products should already be processed)
     store_map = await process_stores(files.stores, chain_id)

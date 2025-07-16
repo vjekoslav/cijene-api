@@ -40,11 +40,24 @@ async def import_archive(path: Path, compute_stats_flag: bool = True) -> None:
         logger.error(f"`{path.stem}` is not a valid date in YYYY-MM-DD format")
         return
 
-    with TemporaryDirectory() as temp_dir:  # type: ignore
-        logger.debug(f"Extracting archive {path} to {temp_dir}")
-        with zipfile.ZipFile(path, "r") as zip_ref:
-            zip_ref.extractall(temp_dir)
-        await _import(Path(temp_dir), price_date, compute_stats_flag)
+    try:
+        with TemporaryDirectory() as temp_dir:  # type: ignore
+            logger.debug(f"Extracting archive {path} to {temp_dir}")
+            with zipfile.ZipFile(path, "r") as zip_ref:
+                zip_ref.extractall(temp_dir)
+            await _import(Path(temp_dir), price_date, compute_stats_flag)
+    except zipfile.BadZipFile:
+        logger.error(f"Invalid or corrupted zip file: {path}")
+        return
+    except FileNotFoundError:
+        logger.error(f"Archive file not found: {path}")
+        return
+    except PermissionError:
+        logger.error(f"Permission denied accessing archive: {path}")
+        return
+    except Exception as e:
+        logger.error(f"Unexpected error processing archive {path}: {e}")
+        return
 
 
 async def import_directory(path: Path, compute_stats_flag: bool = True) -> None:
