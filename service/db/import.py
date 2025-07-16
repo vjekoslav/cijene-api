@@ -60,7 +60,12 @@ async def main():
     await db.connect()
 
     try:
-        # await db.create_tables()
+        # Only create tables if they don't exist (idempotent operation)
+        if hasattr(db, "table_exists") and not await db.table_exists():
+            await db.create_tables()
+        else:
+            # Fallback for databases without table_exists method
+            await db.create_tables()
 
         for path in args.paths:
             if path.is_dir():

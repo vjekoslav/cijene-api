@@ -88,7 +88,7 @@ async def _import(
         price_date: Date for which the prices are valid.
         compute_stats_flag: Whether to compute statistics after import.
     """
-    chain_dirs = [d.resolve() for d in path.iterdir() if d.is_dir()]
+    chain_dirs = [d for d in path.iterdir() if d.is_dir()]
     if not chain_dirs:
         logger.warning(f"No chain directories found in {path}")
         return
