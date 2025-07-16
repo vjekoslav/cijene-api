@@ -18,13 +18,13 @@ db = settings.get_db()
 def parse_date_from_path(path: Path) -> datetime:
     """
     Parse date from path name in YYYY-MM-DD format.
-    
+
     Args:
         path: Path with date in name.
-    
+
     Returns:
         Parsed datetime object.
-    
+
     Raises:
         ValueError: If date format is invalid.
     """
@@ -69,7 +69,7 @@ async def _import(
 ) -> None:
     """
     Import data from chain directories in the given path.
-    
+
     Args:
         path: Path containing chain directories.
         price_date: Date for which the prices are valid.
@@ -85,11 +85,11 @@ async def _import(
     t0 = time()
 
     barcodes = await db.get_product_barcodes()
-    
+
     # Phase 1: Sequential EAN processing to avoid deadlocks
     logger.debug("Phase 1: Processing EAN codes sequentially")
     await _process_eans_sequentially(chain_dirs, price_date, barcodes)
-    
+
     # Phase 2: Parallel processing of stores and prices
     logger.debug("Phase 2: Processing stores and prices in parallel")
     await _process_stores_and_prices_parallel(chain_dirs, price_date, barcodes)
@@ -108,7 +108,7 @@ async def _process_eans_sequentially(
 ) -> None:
     """
     Process EAN codes sequentially to avoid database deadlocks.
-    
+
     Args:
         chain_dirs: List of chain directories to process.
         price_date: Date for which the prices are valid.
@@ -123,7 +123,7 @@ async def _process_stores_and_prices_parallel(
 ) -> None:
     """
     Process stores and prices in parallel since they don't share resources.
-    
+
     Args:
         chain_dirs: List of chain directories to process.
         price_date: Date for which the prices are valid.
@@ -133,5 +133,5 @@ async def _process_stores_and_prices_parallel(
     for chain_dir in chain_dirs:
         task = process_chain_stores_and_prices(price_date, chain_dir, barcodes)
         tasks.append(task)
-    
+
     await asyncio.gather(*tasks)

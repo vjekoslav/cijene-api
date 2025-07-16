@@ -68,7 +68,9 @@ async def main():
             elif path.suffix.lower() == ".zip":
                 await import_archive(path, compute_stats_flag)
             else:
-                logging.error(f"Path `{path}` is neither a directory nor a zip archive.")
+                logging.error(
+                    f"Path `{path}` is neither a directory nor a zip archive."
+                )
     finally:
         await db.close()
 

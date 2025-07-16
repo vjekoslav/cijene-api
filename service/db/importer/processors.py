@@ -1,11 +1,10 @@
 import logging
 from datetime import date
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict
 
 from service.config import settings
-from service.db.models import ChainProduct, Price, Store
+from service.db.models import ChainProduct, Store
 from .csv_reader import read_csv
 
 logger = logging.getLogger("importer.processors")
@@ -27,7 +26,7 @@ async def process_stores(stores_path: Path, chain_id: int) -> Dict[str, int]:
     logger.debug(f"Importing stores from {stores_path}")
 
     stores_data = await read_csv(stores_path)
-    
+
     # Prepare all stores for bulk insertion
     stores_to_create = []
     for store_row in stores_data:
@@ -51,11 +50,11 @@ async def process_stores(stores_path: Path, chain_id: int) -> Dict[str, int]:
 def clean_barcode(data: Dict[str, Any], chain_code: str) -> Dict[str, Any]:
     """
     Clean and validate barcode data.
-    
+
     Args:
         data: Product data dictionary.
         chain_code: Code of the retail chain.
-    
+
     Returns:
         Updated product data dictionary.
     """
@@ -161,27 +160,6 @@ async def process_products(
     return chain_product_map
 
 
-def clean_price(value: str) -> Decimal | None:
-    """
-    Clean and validate price value.
-    
-    Args:
-        value: Price value as string.
-    
-    Returns:
-        Cleaned price as Decimal or None if invalid.
-    """
-    if value is None:
-        return None
-    value = value.strip()
-    if value == "":
-        return None
-    dval = Decimal(value)
-    if dval == 0:
-        return None
-    return dval
-
-
 async def process_prices(
     price_date: date,
     prices_path: Path,
@@ -206,11 +184,8 @@ async def process_prices(
 
     # Use direct CSV streaming for optimal performance
     n_inserted = await db.add_many_prices_direct_csv(
-        prices_path, 
-        price_date, 
-        store_map, 
-        chain_product_map
+        prices_path, price_date, store_map, chain_product_map
     )
-    
+
     logger.debug(f"Imported {n_inserted} prices using direct CSV streaming")
     return n_inserted

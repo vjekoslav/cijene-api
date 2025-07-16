@@ -406,13 +406,13 @@ class PostgresDatabase(Database):
                 )
                 """
             )
-            
+
             # Insert all EAN codes into temporary table
             await conn.copy_records_to_table(
                 "temp_eans",
                 records=[(ean,) for ean in eans],
             )
-            
+
             # Insert new EAN codes (ignoring conflicts for existing ones)
             await conn.execute(
                 """
@@ -421,7 +421,7 @@ class PostgresDatabase(Database):
                 ON CONFLICT (ean) DO NOTHING
                 """
             )
-            
+
             # Fetch all product IDs for the requested EAN codes
             rows = await conn.fetch(
                 """
@@ -429,15 +429,15 @@ class PostgresDatabase(Database):
                 WHERE ean IN (SELECT ean FROM temp_eans)
                 """
             )
-            
+
             # Clean up temporary table
             await conn.execute("DROP TABLE temp_eans")
-            
+
             # Build the result dictionary
             result = {}
             for row in rows:
                 result[row["ean"]] = row["id"]
-            
+
             return result
 
     async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
@@ -671,19 +671,17 @@ class PostgresDatabase(Database):
             # Generate CSV data for optimized bulk insert
             csv_data = io.BytesIO()
             for p in prices:
-                csv_line = f"{p.chain_product_id},{p.store_id},{p.price_date}," \
-                          f"{p.regular_price or '\\N'},{p.special_price or '\\N'}," \
-                          f"{p.unit_price or '\\N'},{p.best_price_30 or '\\N'}," \
-                          f"{p.anchor_price or '\\N'}\n"
-                csv_data.write(csv_line.encode('utf-8'))
-            
+                csv_line = (
+                    f"{p.chain_product_id},{p.store_id},{p.price_date},"
+                    f"{p.regular_price or '\\N'},{p.special_price or '\\N'},"
+                    f"{p.unit_price or '\\N'},{p.best_price_30 or '\\N'},"
+                    f"{p.anchor_price or '\\N'}\n"
+                )
+                csv_data.write(csv_line.encode("utf-8"))
+
             csv_data.seek(0)
             await conn.copy_to_table(
-                "temp_prices",
-                source=csv_data,
-                format='csv',
-                delimiter=',',
-                null='\\N'
+                "temp_prices", source=csv_data, format="csv", delimiter=",", null="\\N"
             )
             result = await conn.execute(
                 """
@@ -702,7 +700,7 @@ class PostgresDatabase(Database):
                 """
             )
             await conn.execute("DROP TABLE temp_prices")
-            
+
             _, _, rowcount = result.split(" ")
             rowcount = int(rowcount)
             return rowcount
@@ -710,44 +708,44 @@ class PostgresDatabase(Database):
     def _clean_price(self, value: str) -> str:
         """
         Clean and validate price value for CSV format using fast string validation.
-        
+
         Args:
             value: Price value as string.
-        
+
         Returns:
             Cleaned price as string or '\\N' for null.
         """
         if not value or not value.strip():
-            return '\\N'
-        
+            return "\\N"
+
         cleaned = value.strip()
-        
+
         # Fast string-based validation without Decimal object creation
         # Match valid price patterns: digits with optional decimal (1-2 places)
-        if re.match(r'^\d+(\.\d{1,2})?$', cleaned):
+        if re.match(r"^\d+(\.\d{1,2})?$", cleaned):
             # Check for zero values without creating Decimal object
-            if cleaned in ('0', '0.0', '0.00'):
-                return '\\N'
+            if cleaned in ("0", "0.0", "0.00"):
+                return "\\N"
             return cleaned
-        
-        return '\\N'
+
+        return "\\N"
 
     async def add_many_prices_direct_csv(
-        self, 
-        csv_path: Path, 
+        self,
+        csv_path: Path,
         price_date: date,
         store_map: dict[str, int],
-        chain_product_map: dict[str, int]
+        chain_product_map: dict[str, int],
     ) -> int:
         """
         Add multiple prices directly from CSV file for optimal performance.
-        
+
         Args:
             csv_path: Path to the CSV file containing price data.
             price_date: The date for which the prices are valid.
             store_map: Dictionary mapping store codes to their database IDs.
             chain_product_map: Dictionary mapping product codes to their database IDs.
-        
+
         Returns:
             The number of prices successfully inserted into the database.
         """
@@ -766,49 +764,56 @@ class PostgresDatabase(Database):
                 )
                 """
             )
-            
+
             # Stream CSV data directly with transformations
             csv_data = io.BytesIO()
             skipped_count = 0
-            
-            with open(csv_path, 'r', encoding='utf-8') as f:
+
+            with open(csv_path, "r", encoding="utf-8") as f:
                 reader = DictReader(f)
                 for row in reader:
                     store_id = store_map.get(row["store_id"])
                     product_id = chain_product_map.get(row["product_id"])
-                    
+
                     if store_id is None or product_id is None:
                         skipped_count += 1
+                        self.logger.warning(
+                            f"Skipped price row due to missing store/product ({store_id}/{product_id}) mappings"
+                        )
                         continue
-                    
-                    # regular_price is required (NOT NULL constraint)
-                    regular_price = self._clean_price(row['price'])
-                    if regular_price == '\\N':
+
+                    # Convert price directly like the old import (no validation)
+                    try:
+                        regular_price = str(Decimal(row["price"].strip()))
+                    except (ValueError, TypeError, AttributeError):
                         skipped_count += 1
+                        self.logger.warning(
+                            f"Skipped price row due to invalid price: {row['price']} - {row}"
+                        )
                         continue
-                    
+
                     # Transform row data
-                    csv_line = f"{product_id},{store_id},{price_date}," \
-                              f"{regular_price}," \
-                              f"{self._clean_price(row.get('special_price', ''))}," \
-                              f"{self._clean_price(row.get('unit_price', ''))}," \
-                              f"{self._clean_price(row.get('best_price_30', ''))}," \
-                              f"{self._clean_price(row.get('anchor_price', ''))}\n"
-                    
-                    csv_data.write(csv_line.encode('utf-8'))
-            
+                    csv_line = (
+                        f"{product_id},{store_id},{price_date},"
+                        f"{regular_price},"
+                        f"{self._clean_price(row.get('special_price', ''))},"
+                        f"{self._clean_price(row.get('unit_price', ''))},"
+                        f"{self._clean_price(row.get('best_price_30', ''))},"
+                        f"{self._clean_price(row.get('anchor_price', ''))}\n"
+                    )
+
+                    csv_data.write(csv_line.encode("utf-8"))
+
             if skipped_count > 0:
-                self.logger.warning(f"Skipped {skipped_count} price rows due to missing store/product ({store_id}/{product_id}) mappings")
-            
+                self.logger.warning(
+                    f"Skipped {skipped_count} price rows due to missing store/product ({store_id}/{product_id}) mappings"
+                )
+
             csv_data.seek(0)
             await conn.copy_to_table(
-                "temp_prices",
-                source=csv_data,
-                format='csv',
-                delimiter=',',
-                null='\\N'
+                "temp_prices", source=csv_data, format="csv", delimiter=",", null="\\N"
             )
-            
+
             result = await conn.execute(
                 """
                 INSERT INTO prices(
@@ -826,7 +831,7 @@ class PostgresDatabase(Database):
                 """
             )
             await conn.execute("DROP TABLE temp_prices")
-            
+
             _, _, rowcount = result.split(" ")
             rowcount = int(rowcount)
             return rowcount

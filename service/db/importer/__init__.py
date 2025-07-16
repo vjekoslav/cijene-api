@@ -19,14 +19,12 @@ The package is organized into the following modules:
 """
 
 from .archive_handler import import_archive, import_directory
-from .chain_importer import process_chain
 from .processors import process_stores, process_products, process_prices
 from .csv_reader import read_csv
 
 __all__ = [
     "import_archive",
-    "import_directory", 
-    "process_chain",
+    "import_directory",
     "process_stores",
     "process_products",
     "process_prices",
