@@ -47,16 +47,16 @@ async def process_stores(stores_path: Path, chain_id: int) -> Dict[str, int]:
     return store_map
 
 
-def clean_barcode(data: Dict[str, Any], chain_code: str) -> Dict[str, Any]:
+def validate_and_fix_barcode(data: Dict[str, Any], chain_code: str) -> Dict[str, Any]:
     """
-    Clean and validate barcode data.
+    Validate barcode data and generate a chain-specific barcode if needed.
 
     Args:
         data: Product data dictionary.
         chain_code: Code of the retail chain.
 
     Returns:
-        Updated product data dictionary.
+        Updated product data dictionary with valid barcode.
     """
     barcode = data.get("barcode", "").strip()
 
@@ -93,25 +93,25 @@ def _filter_new_products(
         List of new products with cleaned barcodes.
     """
     return [
-        clean_barcode(p, chain_code)
+        validate_and_fix_barcode(p, chain_code)
         for p in products_data
         if p["product_id"] not in chain_product_map
     ]
 
 
-def _collect_new_barcodes(
+def _extract_missing_barcodes(
     products: list[Dict[str, Any]], 
     existing_barcodes: Dict[str, int]
 ) -> list[str]:
     """
-    Collect barcodes from products that don't exist in the barcodes dictionary.
+    Extract barcodes from products that don't exist in the existing barcodes dictionary.
     
     Args:
         products: List of product dictionaries.
         existing_barcodes: Dictionary mapping barcodes to global product IDs.
         
     Returns:
-        List of new barcodes that need to be added.
+        List of missing barcodes that need to be registered.
     """
     new_barcodes = []
     for product in products:
@@ -121,18 +121,18 @@ def _collect_new_barcodes(
     return new_barcodes
 
 
-async def _process_new_barcodes(
+async def _register_missing_barcodes_to_database(
     new_products: list[Dict[str, Any]], 
     barcodes_dict: Dict[str, int]
 ) -> None:
     """
-    Process and add new barcodes to the global barcodes dictionary.
+    Register missing barcodes to database and update the global barcodes dictionary.
     
     Args:
         new_products: List of new product dictionaries.
         barcodes_dict: Dictionary mapping barcodes to global product IDs (modified in place).
     """
-    new_barcodes = _collect_new_barcodes(new_products, barcodes_dict)
+    new_barcodes = _extract_missing_barcodes(new_products, barcodes_dict)
     
     if new_barcodes:
         new_barcode_ids = await db.add_many_eans(new_barcodes)
@@ -140,15 +140,15 @@ async def _process_new_barcodes(
         logger.debug(f"Added {len(new_barcodes)} new barcodes to global products")
 
 
-def _validate_product_data(product: Dict[str, Any]) -> Dict[str, str]:
+def _sanitize_product_optional_fields(product: Dict[str, Any]) -> Dict[str, str]:
     """
-    Clean and validate product data by converting empty strings to None.
+    Sanitize optional product fields by converting empty strings to None.
     
     Args:
         product: Raw product dictionary from CSV.
         
     Returns:
-        Cleaned product dictionary with validated field values.
+        Dictionary with sanitized optional field values.
     """
     return {
         "brand": (product["brand"] or "").strip() or None,
@@ -180,7 +180,7 @@ def _create_chain_product_objects(
         code = product["product_id"]
         global_product_id = barcodes_dict[barcode]
         
-        validated_data = _validate_product_data(product)
+        validated_data = _sanitize_product_optional_fields(product)
         
         products_to_create.append(
             ChainProduct(
@@ -220,9 +220,9 @@ async def _insert_chain_products(products_to_create: list[ChainProduct]) -> int:
     return n_inserts
 
 
-async def _refresh_chain_product_map(chain_id: int) -> Dict[str, int]:
+async def _fetch_updated_chain_product_map(chain_id: int) -> Dict[str, int]:
     """
-    Refresh and return the chain product map from the database.
+    Fetch the updated chain product map from the database.
     
     Args:
         chain_id: ID of the chain.
@@ -267,12 +267,12 @@ async def process_products(
         f"Found {len(new_products)} new products out of {len(products_data)} total"
     )
 
-    await _process_new_barcodes(new_products, barcodes)
+    await _register_missing_barcodes_to_database(new_products, barcodes)
 
     products_to_create = _create_chain_product_objects(new_products, chain_id, barcodes)
     await _insert_chain_products(products_to_create)
 
-    return await _refresh_chain_product_map(chain_id)
+    return await _fetch_updated_chain_product_map(chain_id)
 
 
 async def process_prices(
