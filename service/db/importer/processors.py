@@ -294,7 +294,7 @@ async def process_prices(
     logger.debug(f"Processing prices directly from CSV: {prices_path}")
 
     # Use direct CSV streaming for optimal performance
-    n_inserted = await db.add_many_prices_direct_csv(
+    n_inserted = await db.add_many_prices_direct_csv(  # type: ignore[possibly-unbound-attribute]
         prices_path, price_date, store_map, chain_product_map
     )
 
