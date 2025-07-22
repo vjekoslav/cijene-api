@@ -61,7 +61,7 @@ async def main():
 
     try:
         await db.create_tables()
-        
+
         for path in args.paths:
             if path.is_dir():
                 await import_directory(path, compute_stats_flag)
