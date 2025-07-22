@@ -76,6 +76,163 @@ def clean_barcode(data: Dict[str, Any], chain_code: str) -> Dict[str, Any]:
     return data
 
 
+def _filter_new_products(
+    products_data: list[Dict[str, Any]], 
+    chain_product_map: Dict[str, int], 
+    chain_code: str
+) -> list[Dict[str, Any]]:
+    """
+    Filter products that don't exist in the chain and clean their barcodes.
+    
+    Args:
+        products_data: Raw product data from CSV.
+        chain_product_map: Existing product codes mapped to their IDs.
+        chain_code: Code of the retail chain.
+        
+    Returns:
+        List of new products with cleaned barcodes.
+    """
+    return [
+        clean_barcode(p, chain_code)
+        for p in products_data
+        if p["product_id"] not in chain_product_map
+    ]
+
+
+def _collect_new_barcodes(
+    products: list[Dict[str, Any]], 
+    existing_barcodes: Dict[str, int]
+) -> list[str]:
+    """
+    Collect barcodes from products that don't exist in the barcodes dictionary.
+    
+    Args:
+        products: List of product dictionaries.
+        existing_barcodes: Dictionary mapping barcodes to global product IDs.
+        
+    Returns:
+        List of new barcodes that need to be added.
+    """
+    new_barcodes = []
+    for product in products:
+        barcode = product["barcode"]
+        if barcode not in existing_barcodes:
+            new_barcodes.append(barcode)
+    return new_barcodes
+
+
+async def _process_new_barcodes(
+    new_products: list[Dict[str, Any]], 
+    barcodes_dict: Dict[str, int]
+) -> None:
+    """
+    Process and add new barcodes to the global barcodes dictionary.
+    
+    Args:
+        new_products: List of new product dictionaries.
+        barcodes_dict: Dictionary mapping barcodes to global product IDs (modified in place).
+    """
+    new_barcodes = _collect_new_barcodes(new_products, barcodes_dict)
+    
+    if new_barcodes:
+        new_barcode_ids = await db.add_many_eans(new_barcodes)
+        barcodes_dict.update(new_barcode_ids)
+        logger.debug(f"Added {len(new_barcodes)} new barcodes to global products")
+
+
+def _validate_product_data(product: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Clean and validate product data by converting empty strings to None.
+    
+    Args:
+        product: Raw product dictionary from CSV.
+        
+    Returns:
+        Cleaned product dictionary with validated field values.
+    """
+    return {
+        "brand": (product["brand"] or "").strip() or None,
+        "category": (product["category"] or "").strip() or None,
+        "unit": (product["unit"] or "").strip() or None,
+        "quantity": (product["quantity"] or "").strip() or None,
+    }
+
+
+def _create_chain_product_objects(
+    products: list[Dict[str, Any]], 
+    chain_id: int, 
+    barcodes_dict: Dict[str, int]
+) -> list[ChainProduct]:
+    """
+    Create ChainProduct objects from product dictionaries.
+    
+    Args:
+        products: List of product dictionaries.
+        chain_id: ID of the chain.
+        barcodes_dict: Dictionary mapping barcodes to global product IDs.
+        
+    Returns:
+        List of ChainProduct objects ready for database insertion.
+    """
+    products_to_create = []
+    for product in products:
+        barcode = product["barcode"]
+        code = product["product_id"]
+        global_product_id = barcodes_dict[barcode]
+        
+        validated_data = _validate_product_data(product)
+        
+        products_to_create.append(
+            ChainProduct(
+                chain_id=chain_id,
+                product_id=global_product_id,
+                code=code,
+                name=product["name"],
+                brand=validated_data["brand"],
+                category=validated_data["category"],
+                unit=validated_data["unit"],
+                quantity=validated_data["quantity"],
+            )
+        )
+    
+    return products_to_create
+
+
+async def _insert_chain_products(products_to_create: list[ChainProduct]) -> int:
+    """
+    Insert ChainProduct objects into the database with validation.
+    
+    Args:
+        products_to_create: List of ChainProduct objects to insert.
+        
+    Returns:
+        Number of products successfully inserted.
+    """
+    if not products_to_create:
+        return 0
+        
+    n_inserts = await db.add_many_chain_products(products_to_create)
+    if n_inserts != len(products_to_create):
+        logger.warning(
+            f"Expected to insert {len(products_to_create)} products, but inserted {n_inserts}."
+        )
+    logger.debug(f"Imported {len(products_to_create)} new chain products")
+    return n_inserts
+
+
+async def _refresh_chain_product_map(chain_id: int) -> Dict[str, int]:
+    """
+    Refresh and return the chain product map from the database.
+    
+    Args:
+        chain_id: ID of the chain.
+        
+    Returns:
+        Dictionary mapping product codes to their database IDs for the chain.
+    """
+    return await db.get_chain_product_map(chain_id)
+
+
 async def process_products(
     products_path: Path,
     chain_id: int,
@@ -102,14 +259,7 @@ async def process_products(
     products_data = await read_csv(products_path)
     chain_product_map = await db.get_chain_product_map(chain_id)
 
-    # Ideally the CSV would already have valid barcodes, but some older
-    # archives contain invalid ones so we need to clean them up.
-    new_products = [
-        clean_barcode(p, chain_code)
-        for p in products_data
-        if p["product_id"] not in chain_product_map
-    ]
-
+    new_products = _filter_new_products(products_data, chain_product_map, chain_code)
     if not new_products:
         return chain_product_map
 
@@ -117,47 +267,12 @@ async def process_products(
         f"Found {len(new_products)} new products out of {len(products_data)} total"
     )
 
-    # Collect all new barcodes that don't exist in the current barcodes dict
-    new_barcodes = []
-    for product in new_products:
-        barcode = product["barcode"]
-        if barcode not in barcodes:
-            new_barcodes.append(barcode)
+    await _process_new_barcodes(new_products, barcodes)
 
-    # Add all new barcodes in bulk
-    if new_barcodes:
-        new_barcode_ids = await db.add_many_eans(new_barcodes)
-        barcodes.update(new_barcode_ids)
-        logger.debug(f"Added {len(new_barcodes)} new barcodes to global products")
+    products_to_create = _create_chain_product_objects(new_products, chain_id, barcodes)
+    await _insert_chain_products(products_to_create)
 
-    products_to_create = []
-    for product in new_products:
-        barcode = product["barcode"]
-        code = product["product_id"]
-        global_product_id = barcodes[barcode]
-
-        products_to_create.append(
-            ChainProduct(
-                chain_id=chain_id,
-                product_id=global_product_id,
-                code=code,
-                name=product["name"],
-                brand=(product["brand"] or "").strip() or None,
-                category=(product["category"] or "").strip() or None,
-                unit=(product["unit"] or "").strip() or None,
-                quantity=(product["quantity"] or "").strip() or None,
-            )
-        )
-
-    n_inserts = await db.add_many_chain_products(products_to_create)
-    if n_inserts != len(new_products):
-        logger.warning(
-            f"Expected to insert {len(new_products)} products, but inserted {n_inserts}."
-        )
-    logger.debug(f"Imported {len(new_products)} new chain products")
-
-    chain_product_map = await db.get_chain_product_map(chain_id)
-    return chain_product_map
+    return await _refresh_chain_product_map(chain_id)
 
 
 async def process_prices(
