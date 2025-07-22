@@ -140,7 +140,7 @@ async def _register_missing_barcodes_to_database(
         logger.debug(f"Added {len(new_barcodes)} new barcodes to global products")
 
 
-def _sanitize_product_optional_fields(product: Dict[str, Any]) -> Dict[str, str]:
+def _sanitize_product_optional_fields(product: Dict[str, Any]) -> Dict[str, str | None]:
     """
     Sanitize optional product fields by converting empty strings to None.
     
