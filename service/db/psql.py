@@ -770,7 +770,7 @@ class PostgresDatabase(Database):
             skipped_count = 0
 
             with open(csv_path, "r", encoding="utf-8") as f:
-                reader = DictReader(f)
+                reader = DictReader(f)  # type: ignore[no-matching-overload]
                 for row in reader:
                     store_id = store_map.get(row["store_id"])
                     product_id = chain_product_map.get(row["product_id"])
