@@ -1,5 +1,7 @@
 # Editors / IDEs
 .zed/
+.vscode/
+.idea/
 
 # Python-generated files
 __pycache__/
