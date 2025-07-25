@@ -164,6 +164,64 @@ class PostgresDatabase(Database):
             store.zipcode or None,
         )
 
+    async def add_many_stores(self, stores: list[Store]) -> dict[str, int]:
+        """
+        Add multiple stores in a batch operation and return mapping of codes to IDs.
+        """
+        if not stores:
+            return {}
+
+        async with self._get_conn() as conn:
+            # Create temporary table for bulk insert
+            await conn.execute(
+                """
+                CREATE TEMP TABLE temp_stores (
+                    chain_id INTEGER,
+                    code VARCHAR(100),
+                    type VARCHAR(100),
+                    address VARCHAR(255),
+                    city VARCHAR(100),
+                    zipcode VARCHAR(20)
+                )
+                """
+            )
+            
+            # Insert data into temp table
+            await conn.copy_records_to_table(
+                "temp_stores",
+                records=(
+                    (
+                        s.chain_id,
+                        s.code,
+                        s.type,
+                        s.address or None,
+                        s.city or None,
+                        s.zipcode or None,
+                    )
+                    for s in stores
+                ),
+            )
+
+            # Insert from temp table with conflict resolution and get results
+            rows = await conn.fetch(
+                """
+                INSERT INTO stores (chain_id, code, type, address, city, zipcode)
+                SELECT chain_id, code, type, address, city, zipcode FROM temp_stores
+                ON CONFLICT (chain_id, code) DO UPDATE SET 
+                    type = COALESCE(EXCLUDED.type, stores.type), 
+                    address = COALESCE(EXCLUDED.address, stores.address), 
+                    city = COALESCE(EXCLUDED.city, stores.city), 
+                    zipcode = COALESCE(EXCLUDED.zipcode, stores.zipcode)
+                RETURNING id, code
+                """
+            )
+
+            # Clean up temp table
+            await conn.execute("DROP TABLE temp_stores")
+
+            # Build the mapping of store codes to IDs
+            return {row["code"]: row["id"] for row in rows}
+
     async def update_store(
         self,
         chain_id: int,
@@ -301,6 +359,54 @@ class PostgresDatabase(Database):
             "INSERT INTO products (ean) VALUES ($1) RETURNING id",
             ean,
         )
+
+    async def add_many_eans(self, eans: list[str]) -> dict[str, int]:
+        """
+        Add multiple EAN codes in a batch operation.
+        """
+        if not eans:
+            return {}
+
+        async with self._get_conn() as conn:
+            # Create temporary table for bulk insert
+            await conn.execute(
+                """
+                CREATE TEMP TABLE temp_eans (
+                    ean VARCHAR(50)
+                )
+                """
+            )
+            
+            # Insert data into temp table
+            await conn.copy_records_to_table(
+                "temp_eans",
+                records=((ean,) for ean in eans),
+            )
+
+            # Insert from temp table with conflict resolution and get results
+            rows = await conn.fetch(
+                """
+                INSERT INTO products (ean)
+                SELECT ean FROM temp_eans
+                ON CONFLICT (ean) DO NOTHING
+                RETURNING id, ean
+                """
+            )
+
+            # For EANs that already existed, get their IDs
+            existing_rows = await conn.fetch(
+                """
+                SELECT id, ean FROM products 
+                WHERE ean IN (SELECT ean FROM temp_eans)
+                """
+            )
+
+            # Clean up temp table
+            await conn.execute("DROP TABLE temp_eans")
+
+            # Build the mapping of EAN codes to IDs (prioritize existing ones)
+            result = {row["ean"]: row["id"] for row in existing_rows}
+            return result
 
     async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
         async with self._get_conn() as conn:

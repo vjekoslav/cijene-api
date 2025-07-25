@@ -84,6 +84,19 @@ class Database(ABC):
         pass
 
     @abstractmethod
+    async def add_many_stores(self, stores: list[Store]) -> dict[str, int]:
+        """
+        Add multiple stores in a batch operation and return mapping of codes to IDs.
+
+        Args:
+            stores: List of Store objects to add.
+
+        Returns:
+            Dictionary mapping store codes to their database IDs.
+        """
+        pass
+
+    @abstractmethod
     async def update_store(
         self,
         chain_id: int,
@@ -188,6 +201,19 @@ class Database(ABC):
 
         Returns:
             The ID of the created product.
+        """
+        pass
+
+    @abstractmethod
+    async def add_many_eans(self, eans: list[str]) -> dict[str, int]:
+        """
+        Add multiple EAN codes in a batch operation.
+
+        Args:
+            eans: List of EAN codes to add.
+
+        Returns:
+            Dictionary mapping EAN codes to their product IDs.
         """
         pass
 
