@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from service.config import settings
-from .importer import import_archive, import_directory, process_chain
+from .importer import import_archive, import_directory
 
 logger = logging.getLogger("importer")
 
@@ -66,9 +66,9 @@ async def main():
 
         for path in args.paths:
             if path.is_dir():
-                await import_directory(path, compute_stats_flag, process_chain)
+                await import_directory(path, compute_stats_flag)
             elif path.suffix.lower() == ".zip":
-                await import_archive(path, compute_stats_flag, process_chain)
+                await import_archive(path, compute_stats_flag)
             else:
                 logger.error(f"Path `{path}` is neither a directory nor a zip archive.")
     finally:

@@ -383,13 +383,12 @@ class PostgresDatabase(Database):
                 records=((ean,) for ean in eans),
             )
 
-            # Insert from temp table with conflict resolution and get results
-            rows = await conn.fetch(
+            # Insert from temp table with conflict resolution
+            await conn.execute(
                 """
                 INSERT INTO products (ean)
                 SELECT ean FROM temp_eans
                 ON CONFLICT (ean) DO NOTHING
-                RETURNING id, ean
                 """
             )
 
@@ -672,6 +671,104 @@ class PostgresDatabase(Database):
             _, _, rowcount = result.split(" ")
             rowcount = int(rowcount)
             return rowcount
+
+    async def add_many_prices_direct_csv(
+        self, 
+        csv_path, 
+        price_date, 
+        store_map: dict[str, int], 
+        chain_product_map: dict[str, int]
+    ) -> int:
+        """
+        Add prices directly from CSV file using streaming for optimal performance.
+        """
+        from csv import DictReader
+        from decimal import Decimal
+        
+        async with self._atomic() as conn:
+            # Create temporary table for bulk insert
+            await conn.execute(
+                """
+                CREATE TEMP TABLE temp_prices_csv (
+                    chain_product_id INTEGER,
+                    store_id INTEGER,
+                    price_date DATE,
+                    regular_price DECIMAL(10, 2),
+                    special_price DECIMAL(10, 2),
+                    unit_price DECIMAL(10, 2),
+                    best_price_30 DECIMAL(10, 2),
+                    anchor_price DECIMAL(10, 2)
+                )
+                """
+            )
+
+            def clean_price(value: str) -> Decimal | None:
+                if value is None:
+                    return None
+                value = value.strip()
+                if value == "":
+                    return None
+                dval = Decimal(value)
+                if dval == 0:
+                    return None
+                return dval
+
+            # Stream data directly from CSV and prepare for bulk insert
+            records_to_insert = []
+            skipped_count = 0
+            
+            with open(csv_path, "r", encoding="utf-8") as f:
+                reader = DictReader(f)
+                for price_row in reader:
+                    store_id = store_map.get(price_row["store_id"])
+                    product_id = chain_product_map.get(price_row["product_id"])
+                    
+                    if store_id is None or product_id is None:
+                        skipped_count += 1
+                        continue
+
+                    records_to_insert.append((
+                        product_id,
+                        store_id,
+                        price_date,
+                        Decimal(price_row["price"]),
+                        clean_price(price_row.get("special_price") or ""),
+                        clean_price(price_row["unit_price"]),
+                        clean_price(price_row["best_price_30"]),
+                        clean_price(price_row["anchor_price"]),
+                    ))
+
+            if skipped_count:
+                logging.warning(f"Skipped {skipped_count} price rows due to missing store/product mappings")
+
+            # Bulk insert using copy_records_to_table for maximum performance
+            if records_to_insert:
+                await conn.copy_records_to_table("temp_prices_csv", records=records_to_insert)
+
+            # Insert from temp table with conflict resolution
+            result = await conn.execute(
+                """
+                INSERT INTO prices(
+                    chain_product_id,
+                    store_id,
+                    price_date,
+                    regular_price,
+                    special_price,
+                    unit_price,
+                    best_price_30,
+                    anchor_price
+                )
+                SELECT * FROM temp_prices_csv
+                ON CONFLICT DO NOTHING
+                """
+            )
+            
+            # Clean up temp table
+            await conn.execute("DROP TABLE temp_prices_csv")
+            
+            # Parse result to get row count
+            _, _, rowcount = result.split(" ")
+            return int(rowcount)
 
     async def add_many_chain_products(
         self,

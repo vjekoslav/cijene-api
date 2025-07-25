@@ -4,12 +4,11 @@ Core processors for handling stores, products, and prices CSV data.
 
 import logging
 from datetime import date
-from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict
 
 from service.config import settings
-from service.db.models import ChainProduct, Price, Store
+from service.db.models import ChainProduct, Store
 from .csv_reader import read_csv
 
 logger = logging.getLogger("importer.processors")
@@ -280,11 +279,11 @@ async def process_prices(
     price_date: date,
     prices_path: Path,
     chain_id: int,
-    store_map: dict[str, int],
-    chain_product_map: dict[str, int],
+    store_map: Dict[str, int],
+    chain_product_map: Dict[str, int],
 ) -> int:
     """
-    Process prices CSV and import to database.
+    Process prices CSV and import to database using direct CSV streaming.
 
     Args:
         price_date: The date for which the prices are valid.
@@ -296,50 +295,12 @@ async def process_prices(
     Returns:
         The number of prices successfully inserted into the database.
     """
-    logger.debug(f"Reading prices from {prices_path}")
+    logger.debug(f"Processing prices directly from CSV: {prices_path}")
 
-    prices_data = await read_csv(prices_path)
+    # Use direct CSV streaming for optimal performance
+    n_inserted = await db.add_many_prices_direct_csv(  # type: ignore[possibly-unbound-attribute]
+        prices_path, price_date, store_map, chain_product_map
+    )
 
-    # Create price objects
-    prices_to_create = []
-
-    logger.debug(f"Found {len(prices_data)} price entries, preparing to import")
-
-    def clean_price(value: str) -> Decimal | None:
-        if value is None:
-            return None
-        value = value.strip()
-        if value == "":
-            return None
-        dval = Decimal(value)
-        if dval == 0:
-            return None
-        return dval
-
-    for price_row in prices_data:
-        store_id = store_map[price_row["store_id"]]
-        product_id = chain_product_map.get(price_row["product_id"])
-        if product_id is None:
-            # Price for a product that wasn't added, perhaps because the
-            # barcode is invalid
-            logger.warning(
-                f"Skipping price for unknown product {price_row['product_id']}"
-            )
-            continue
-
-        prices_to_create.append(
-            Price(
-                chain_product_id=product_id,
-                store_id=store_id,
-                price_date=price_date,
-                regular_price=Decimal(price_row["price"]),
-                special_price=clean_price(price_row.get("special_price") or ""),
-                unit_price=clean_price(price_row["unit_price"]),
-                best_price_30=clean_price(price_row["best_price_30"]),
-                anchor_price=clean_price(price_row["anchor_price"]),
-            )
-        )
-
-    logger.debug(f"Importing {len(prices_to_create)} prices")
-    n_inserted = await db.add_many_prices(prices_to_create)
+    logger.debug(f"Imported {n_inserted} prices using direct CSV streaming")
     return n_inserted
