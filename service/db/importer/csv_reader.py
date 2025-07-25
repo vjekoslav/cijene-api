@@ -19,11 +19,21 @@ async def read_csv(file_path: Path) -> List[Dict[str, str]]:
 
     Returns:
         List of dictionaries where each dictionary represents a row in the CSV.
+        Returns empty list if file cannot be read.
     """
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             reader = DictReader(f)  # type: ignore
             return [row for row in reader]
+    except FileNotFoundError:
+        logger.error(f"CSV file not found: {file_path}")
+        return []
+    except PermissionError:
+        logger.error(f"Permission denied reading CSV file: {file_path}")
+        return []
+    except UnicodeDecodeError as e:
+        logger.error(f"Encoding error reading CSV file {file_path}: {e}")
+        return []
     except Exception as e:
-        logger.error(f"Error reading {file_path}: {e}")
+        logger.error(f"Unexpected error reading CSV file {file_path}: {e}")
         return []

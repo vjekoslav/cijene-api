@@ -11,17 +11,15 @@ The package is organized into:
 - chain_importer: Chain-level import coordination
 """
 
-from .csv_reader import read_csv
 from .archive_handler import import_archive, import_directory
 from .processors import process_stores, process_products, process_prices
-from .chain_importer import process_chain
+from .csv_reader import read_csv
 
 __all__ = [
-    "read_csv",
     "import_archive",
     "import_directory",
     "process_stores",
-    "process_products", 
+    "process_products",
     "process_prices",
-    "process_chain",
+    "read_csv",
 ]

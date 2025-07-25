@@ -8,6 +8,11 @@ from typing import (
 )
 import logging
 import os
+import io
+import re
+from csv import DictReader
+from pathlib import Path
+from decimal import Decimal
 from datetime import date
 from .base import Database
 from .models import (
@@ -29,7 +34,7 @@ from .models import (
 class PostgresDatabase(Database):
     """PostgreSQL implementation of the database interface using asyncpg."""
 
-    def __init__(self, dsn: str, min_size: int = 10, max_size: int = 30):
+    def __init__(self, dsn: str, min_size: int = 20, max_size: int = 50):
         """Initialize the PostgreSQL database connection pool.
 
         Args:
@@ -166,12 +171,18 @@ class PostgresDatabase(Database):
 
     async def add_many_stores(self, stores: list[Store]) -> dict[str, int]:
         """
-        Add multiple stores in a batch operation and return mapping of codes to IDs.
+        Add multiple stores in a batch operation.
+
+        Args:
+            stores: List of Store objects to add or update.
+
+        Returns:
+            Dictionary mapping store codes to their database IDs.
         """
         if not stores:
             return {}
 
-        async with self._get_conn() as conn:
+        async with self._atomic() as conn:
             # Create temporary table for bulk insert
             await conn.execute(
                 """
@@ -186,41 +197,54 @@ class PostgresDatabase(Database):
                 """
             )
             
-            # Insert data into temp table
+            # Insert all stores into temporary table
             await conn.copy_records_to_table(
                 "temp_stores",
-                records=(
+                records=[
                     (
-                        s.chain_id,
-                        s.code,
-                        s.type,
-                        s.address or None,
-                        s.city or None,
-                        s.zipcode or None,
+                        store.chain_id,
+                        store.code,
+                        store.type,
+                        store.address or None,
+                        store.city or None,
+                        store.zipcode or None,
                     )
-                    for s in stores
-                ),
+                    for store in stores
+                ],
             )
 
-            # Insert from temp table with conflict resolution and get results
-            rows = await conn.fetch(
+            # Perform bulk upsert and get all store IDs
+            await conn.execute(
                 """
                 INSERT INTO stores (chain_id, code, type, address, city, zipcode)
-                SELECT chain_id, code, type, address, city, zipcode FROM temp_stores
-                ON CONFLICT (chain_id, code) DO UPDATE SET 
-                    type = COALESCE(EXCLUDED.type, stores.type), 
-                    address = COALESCE(EXCLUDED.address, stores.address), 
-                    city = COALESCE(EXCLUDED.city, stores.city), 
+                SELECT chain_id, code, type, address, city, zipcode
+                FROM temp_stores
+                ON CONFLICT (chain_id, code) DO UPDATE SET
+                    type = COALESCE(EXCLUDED.type, stores.type),
+                    address = COALESCE(EXCLUDED.address, stores.address),
+                    city = COALESCE(EXCLUDED.city, stores.city),
                     zipcode = COALESCE(EXCLUDED.zipcode, stores.zipcode)
-                RETURNING id, code
                 """
             )
 
-            # Clean up temp table
+            # Fetch all store IDs for the provided stores
+            rows = await conn.fetch(
+                """
+                SELECT s.id, s.code
+                FROM stores s
+                JOIN temp_stores t ON s.chain_id = t.chain_id AND s.code = t.code
+                """
+            )
+
+            # Clean up temporary table
             await conn.execute("DROP TABLE temp_stores")
 
-            # Build the mapping of store codes to IDs
-            return {row["code"]: row["id"] for row in rows}
+            # Build the result dictionary
+            result = {}
+            for row in rows:
+                result[row["code"]] = row["id"]
+
+            return result
 
     async def update_store(
         self,
@@ -367,7 +391,7 @@ class PostgresDatabase(Database):
         if not eans:
             return {}
 
-        async with self._get_conn() as conn:
+        async with self._atomic() as conn:
             # Create temporary table for bulk insert
             await conn.execute(
                 """
@@ -393,9 +417,9 @@ class PostgresDatabase(Database):
             )
 
             # For EANs that already existed, get their IDs
-            existing_rows = await conn.fetch(
+            rows = await conn.fetch(
                 """
-                SELECT id, ean FROM products 
+                SELECT id, ean FROM products
                 WHERE ean IN (SELECT ean FROM temp_eans)
                 """
             )
@@ -403,8 +427,11 @@ class PostgresDatabase(Database):
             # Clean up temp table
             await conn.execute("DROP TABLE temp_eans")
 
-            # Build the mapping of EAN codes to IDs (prioritize existing ones)
-            result = {row["ean"]: row["id"] for row in existing_rows}
+            # Build the result dictionary
+            result = {}
+            for row in rows:
+                result[row["ean"]] = row["id"]
+
             return result
 
     async def get_products_by_ean(self, ean: list[str]) -> list[ProductWithId]:
@@ -672,24 +699,55 @@ class PostgresDatabase(Database):
             rowcount = int(rowcount)
             return rowcount
 
+    def _clean_price(self, value: str) -> str:
+        """
+        Clean and validate price value for CSV format using fast string validation.
+
+        Args:
+            value: Price value as string.
+
+        Returns:
+            Cleaned price as string or '\\N' for null.
+        """
+        if not value or not value.strip():
+            return "\\N"
+
+        cleaned = value.strip()
+
+        # Fast string-based validation without Decimal object creation
+        # Match valid price patterns: digits with optional decimal (1-2 places)
+        if re.match(r"^\d+(\.\d{1,2})?$", cleaned):
+            # Check for zero values without creating Decimal object
+            if cleaned in ("0", "0.0", "0.00"):
+                return "\\N"
+            return cleaned
+
+        return "\\N"
+
     async def add_many_prices_direct_csv(
-        self, 
-        csv_path, 
-        price_date, 
-        store_map: dict[str, int], 
-        chain_product_map: dict[str, int]
+        self,
+        csv_path: Path,
+        price_date: date,
+        store_map: dict[str, int],
+        chain_product_map: dict[str, int],
     ) -> int:
         """
-        Add prices directly from CSV file using streaming for optimal performance.
+        Add multiple prices directly from CSV file for optimal performance.
+
+        Args:
+            csv_path: Path to the CSV file containing price data.
+            price_date: The date for which the prices are valid.
+            store_map: Dictionary mapping store codes to their database IDs.
+            chain_product_map: Dictionary mapping product codes to their database IDs.
+
+        Returns:
+            The number of prices successfully inserted into the database.
         """
-        from csv import DictReader
-        from decimal import Decimal
         
         async with self._atomic() as conn:
-            # Create temporary table for bulk insert
             await conn.execute(
                 """
-                CREATE TEMP TABLE temp_prices_csv (
+                CREATE TEMP TABLE temp_prices (
                     chain_product_id INTEGER,
                     store_id INTEGER,
                     price_date DATE,
@@ -702,50 +760,55 @@ class PostgresDatabase(Database):
                 """
             )
 
-            def clean_price(value: str) -> Decimal | None:
-                if value is None:
-                    return None
-                value = value.strip()
-                if value == "":
-                    return None
-                dval = Decimal(value)
-                if dval == 0:
-                    return None
-                return dval
-
-            # Stream data directly from CSV and prepare for bulk insert
-            records_to_insert = []
+            # Stream CSV data directly with transformations
+            csv_data = io.BytesIO()
             skipped_count = 0
-            
+
             with open(csv_path, "r", encoding="utf-8") as f:
-                reader = DictReader(f)
-                for price_row in reader:
-                    store_id = store_map.get(price_row["store_id"])
-                    product_id = chain_product_map.get(price_row["product_id"])
-                    
+                reader = DictReader(f)  # type: ignore[no-matching-overload]
+                for row in reader:
+                    store_id = store_map.get(row["store_id"])
+                    product_id = chain_product_map.get(row["product_id"])
+
                     if store_id is None or product_id is None:
                         skipped_count += 1
+                        self.logger.warning(
+                            f"Skipped price row due to missing store/product ({store_id}/{product_id}) mappings"
+                        )
                         continue
 
-                    records_to_insert.append((
-                        product_id,
-                        store_id,
-                        price_date,
-                        Decimal(price_row["price"]),
-                        clean_price(price_row.get("special_price") or ""),
-                        clean_price(price_row["unit_price"]),
-                        clean_price(price_row["best_price_30"]),
-                        clean_price(price_row["anchor_price"]),
-                    ))
+                    # Convert price directly like the old import (no validation)
+                    try:
+                        regular_price = str(Decimal(row["price"].strip()))
+                    except (ValueError, TypeError, AttributeError):
+                        skipped_count += 1
+                        self.logger.warning(
+                            f"Skipped price row due to invalid price: {row['price']} - {row}"
+                        )
+                        continue
 
-            if skipped_count:
-                logging.warning(f"Skipped {skipped_count} price rows due to missing store/product mappings")
+                    # Transform row data
+                    csv_line = (
+                        f"{product_id},{store_id},{price_date},"
+                        f"{regular_price},"
+                        f"{self._clean_price(row.get('special_price', ''))},"
+                        f"{self._clean_price(row.get('unit_price', ''))},"
+                        f"{self._clean_price(row.get('best_price_30', ''))},"
+                        f"{self._clean_price(row.get('anchor_price', ''))}\n"
+                    )
 
-            # Bulk insert using copy_records_to_table for maximum performance
-            if records_to_insert:
-                await conn.copy_records_to_table("temp_prices_csv", records=records_to_insert)
+                    csv_data.write(csv_line.encode("utf-8"))
 
-            # Insert from temp table with conflict resolution
+            if skipped_count > 0:
+                self.logger.warning(
+                    f"Skipped {skipped_count} price rows due to missing store/product ({store_id}/{product_id}) mappings"
+                )
+
+            csv_data.seek(0)
+            await conn.copy_to_table(
+                "temp_prices", source=csv_data, format="csv", delimiter=",", null="\\N"
+            )
+
             result = await conn.execute(
                 """
                 INSERT INTO prices(
@@ -758,17 +821,15 @@ class PostgresDatabase(Database):
                     best_price_30,
                     anchor_price
                 )
-                SELECT * FROM temp_prices_csv
+                SELECT * from temp_prices
                 ON CONFLICT DO NOTHING
                 """
             )
-            
-            # Clean up temp table
-            await conn.execute("DROP TABLE temp_prices_csv")
-            
-            # Parse result to get row count
+            await conn.execute("DROP TABLE temp_prices")
+
             _, _, rowcount = result.split(" ")
-            return int(rowcount)
+            rowcount = int(rowcount)
+            return rowcount
 
     async def add_many_chain_products(
         self,

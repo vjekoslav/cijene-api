@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 from .models import (
@@ -289,28 +288,6 @@ class Database(ABC):
 
         Returns:
             The number of prices newly added.
-        """
-        pass
-
-    @abstractmethod
-    async def add_many_prices_direct_csv(
-        self, 
-        csv_path: Path, 
-        price_date: date, 
-        store_map: dict[str, int], 
-        chain_product_map: dict[str, int]
-    ) -> int:
-        """
-        Add prices directly from CSV file using streaming for optimal performance.
-
-        Args:
-            csv_path: Path to the CSV file containing price data.
-            price_date: The date for which the prices are valid.
-            store_map: Dictionary mapping store codes to their database IDs.
-            chain_product_map: Dictionary mapping product codes to their database IDs.
-
-        Returns:
-            The number of prices successfully inserted.
         """
         pass
 
