@@ -3,7 +3,6 @@ import argparse
 import asyncio
 import logging
 import zipfile
-from csv import DictReader
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -14,29 +13,11 @@ from typing import Any, Dict, List
 from service.config import settings
 from service.db.models import Chain, ChainProduct, Price, Store
 from service.db.stats import compute_stats
+from service.db.importer import read_csv
 
 logger = logging.getLogger("importer")
 
 db = settings.get_db()
-
-
-async def read_csv(file_path: Path) -> List[Dict[str, str]]:
-    """
-    Read a CSV file and return a list of dictionaries.
-
-    Args:
-        file_path: Path to the CSV file.
-
-    Returns:
-        List of dictionaries where each dictionary represents a row in the CSV.
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            reader = DictReader(f)  # type: ignore
-            return [row for row in reader]
-    except Exception as e:
-        logger.error(f"Error reading {file_path}: {e}")
-        return []
 
 
 async def process_stores(stores_path: Path, chain_id: int) -> dict[str, int]:
